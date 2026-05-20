@@ -1,24 +1,36 @@
 app:
   chat:
     memory:
-      # Sliding window of USER/ASSISTANT messages per conversation (default in Spring AI: 20)
+      # Sliding window of USER/ASSISTANT/TOOL messages per conversation (model context)
       max-messages: 30
 
 logging:
   level:
-    com.example.javaagentmvp.QwenApiLoggingAdvisor: ERROR
-#    com.alibaba.cloud.ai.dashscope: DEBUG
-#    com.alibaba.cloud.ai.dashscope.api: DEBUG
-#    com.alibaba.cloud.ai.dashscope.chat: DEBUG
-#    org.springframework.ai.chat.client: DEBUG
-#    org.springframework.ai.chat.model: DEBUG
-#    org.springframework.ai.model.tool: DEBUG
-#    org.springframework.ai.mcp: DEBUG
-#    org.springframework.web.client.RestClient: DEBUG
+    org.flywaydb: INFO
+    com.example.javaagentmvp.QwenApiLoggingAdvisor: INFO
+    com.alibaba.cloud.ai.dashscope: DEBUG
+    com.alibaba.cloud.ai.dashscope.api: DEBUG
+    com.alibaba.cloud.ai.dashscope.chat: DEBUG
+    org.springframework.ai.chat.client: DEBUG
+    org.springframework.ai.chat.model: DEBUG
+    org.springframework.ai.model.tool: DEBUG
+    org.springframework.ai.mcp: DEBUG
+    org.springframework.web.client.RestClient: DEBUG
 
 spring:
-  main:
-    web-application-type: none  # CLI agent, do not start Netty web server
+  datasource:
+    url: jdbc:postgresql://127.0.0.1:5432/opstream
+    username: postgres
+    password: ${AGENT_UI_DB_PASSWORD:}
+    hikari:
+      maximum-pool-size: 8
+
+  flyway:
+    enabled: true
+    create-schemas: true
+    schemas: agent_ui
+    default-schema: agent_ui
+    locations: classpath:db/migration
 
   ai:
     # MCP Client configuration
@@ -34,10 +46,13 @@ spring:
         toolcallback:
           enabled: true      # Auto register MCP as Spring AI Tool
 
-#    alibaba:
     dashscope:
+      # API Key: https://dashscope.console.aliyun.com/apiKey
       api-key: ${DASHSCOPE_API_KEY}
       chat:
         options:
           model: qwen-plus
           temperature: 0.0
+
+server:
+  port: 8080
