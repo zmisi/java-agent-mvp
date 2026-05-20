@@ -1,0 +1,24 @@
+spring:
+  main:
+    web-application-type: none  # CLI agent, do not start Netty web server
+
+  ai:
+    # MCP Client configuration
+    mcp:
+      client:
+        enabled: true
+        name: opstream-agent
+        version: 1.0.0
+        type: SYNC
+        request-timeout: 30s
+        stdio:
+          servers-configuration: classpath:/mcp-servers-config.json
+        toolcallback:
+          enabled: true      # Auto register MCP as Spring AI Tool
+#    alibaba:
+    dashscope:
+      api-key: ${DASHSCOPE_API_KEY}
+      chat:
+        options:
+          model: qwen-plus
+          temperature: 0.0
