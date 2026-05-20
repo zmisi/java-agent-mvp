@@ -23,6 +23,12 @@ logging:
     org.springframework.ai.mcp: DEBUG
     org.springframework.web.client.RestClient: DEBUG
 
+mybatis:
+  mapper-locations: classpath:mapper/**/*.xml
+  type-aliases-package: com.example.javaagentmvp.chat.persistence.model
+  configuration:
+    map-underscore-to-camel-case: true
+
 spring:
   datasource:
     url: jdbc:postgresql://127.0.0.1:5432/opstream

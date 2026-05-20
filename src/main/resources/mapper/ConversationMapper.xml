@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.javaagentmvp.chat.persistence.mapper.ConversationMapper">
+
+    <insert id="insert">
+        INSERT INTO agent_ui.conversation (id, title, created_at, updated_at)
+        VALUES (#{id}, #{title}, #{createdAt}, #{updatedAt})
+    </insert>
+
+    <insert id="insertIfMissing">
+        INSERT INTO agent_ui.conversation (id, title, created_at, updated_at)
+        VALUES (#{id}, #{title}, #{createdAt}, #{updatedAt})
+        ON CONFLICT (id) DO NOTHING
+    </insert>
+
+    <select id="countById" resultType="int">
+        SELECT COUNT(*)::int
+        FROM agent_ui.conversation
+        WHERE id = #{id}
+    </select>
+
+    <update id="touchUpdatedAt">
+        UPDATE agent_ui.conversation
+        SET updated_at = #{updatedAt}
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateTitleIfDefault">
+        UPDATE agent_ui.conversation
+        SET title = #{title},
+            updated_at = #{updatedAt}
+        WHERE id = #{id}
+          AND title IN ('新对话', 'CLI 会话')
+    </update>
+
+    <update id="updateTitle">
+        UPDATE agent_ui.conversation
+        SET title = #{title},
+            updated_at = #{updatedAt}
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM agent_ui.conversation
+        WHERE id = #{id}
+    </delete>
+
+    <select id="listSummaries"
+            resultType="com.example.javaagentmvp.chat.persistence.model.ConversationSummaryRow">
+        SELECT id,
+               title,
+               created_at::text AS created_at,
+               updated_at::text AS updated_at
+        FROM agent_ui.conversation
+        ORDER BY updated_at DESC
+        LIMIT 200
+    </select>
+
+    <select id="selectTitleById" resultType="string">
+        SELECT title
+        FROM agent_ui.conversation
+        WHERE id = #{id}
+    </select>
+
+</mapper>

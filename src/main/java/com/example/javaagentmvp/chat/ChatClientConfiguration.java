@@ -12,7 +12,7 @@ import org.springframework.ai.tool.ToolCallback;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.jdbc.core.JdbcTemplate;
+import com.example.javaagentmvp.chat.persistence.mapper.ChatMemoryMessageMapper;
 
 import java.util.List;
 
@@ -27,10 +27,13 @@ public class ChatClientConfiguration {
 
     @Bean
     PostgresChatMemory postgresChatMemory(
-            JdbcTemplate jdbcTemplate,
+            ChatMemoryMessageMapper chatMemoryMessageMapper,
             ObjectMapper objectMapper,
             ChatMemoryProperties chatMemoryProperties) {
-        return new PostgresChatMemory(jdbcTemplate, objectMapper, chatMemoryProperties.maxMessages());
+        return new PostgresChatMemory(
+                chatMemoryMessageMapper,
+                objectMapper,
+                chatMemoryProperties.maxMessages());
     }
 
     @Bean

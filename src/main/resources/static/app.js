@@ -138,7 +138,7 @@ function setComposerState(hasSession) {
   $("input").disabled = false;
   document.querySelector(".composer-inner")?.classList.remove("is-busy");
   $("input").placeholder = hasSession
-    ? "询问数据库…（Enter 发送，Shift+Enter 换行）"
+    ? "询问数据库…（⌘+Enter 发送，Enter 换行）"
     : "请先选择左侧会话，或点击「新对话」";
 }
 
@@ -546,13 +546,15 @@ function wire() {
   });
 
   input.addEventListener("keydown", (ev) => {
-    if (ev.key === "Enter" && !ev.shiftKey) {
-      ev.preventDefault();
-      if (state.inFlight) {
-        stopMessage();
-      } else {
-        sendMessage();
-      }
+    const sendShortcut = ev.key === "Enter" && (ev.metaKey || ev.ctrlKey);
+    if (!sendShortcut) {
+      return;
+    }
+    ev.preventDefault();
+    if (state.inFlight) {
+      stopMessage();
+    } else {
+      sendMessage();
     }
   });
 

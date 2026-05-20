@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.javaagentmvp.chat.persistence.mapper.ChatMemoryMessageMapper">
+
+    <insert id="insertMessage">
+        INSERT INTO agent_ui.chat_memory_message (conversation_id, payload)
+        VALUES (#{conversationId}, CAST(#{payloadJson} AS jsonb))
+    </insert>
+
+    <select id="selectRecentPayloadJson" resultType="string">
+        SELECT m.payload::text
+        FROM agent_ui.chat_memory_message m
+        INNER JOIN (
+            SELECT id
+            FROM agent_ui.chat_memory_message
+            WHERE conversation_id = #{conversationId}
+            ORDER BY id DESC
+            LIMIT #{limit}
+        ) t ON m.id = t.id
+        ORDER BY m.id ASC
+    </select>
+
+    <delete id="deleteByConversationId">
+        DELETE FROM agent_ui.chat_memory_message
+        WHERE conversation_id = #{conversationId}
+    </delete>
+
+    <select id="selectTranscriptByConversationId"
+            resultType="com.example.javaagentmvp.chat.persistence.model.ChatMemoryMessageRow">
+        SELECT id,
+               created_at::text AS created_at,
+               payload::text AS payload_json
+        FROM agent_ui.chat_memory_message
+        WHERE conversation_id = #{conversationId}
+        ORDER BY id ASC
+    </select>
+
+</mapper>

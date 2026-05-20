@@ -1,13 +1,13 @@
 package com.example.javaagentmvp.chat;
 
+import com.example.javaagentmvp.chat.persistence.mapper.ChatMemoryMessageMapper;
+import com.example.javaagentmvp.chat.persistence.model.ChatMemoryMessageRow;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.messages.Message;
-import org.springframework.jdbc.core.JdbcTemplate;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -17,14 +17,17 @@ import java.util.List;
  */
 public final class PostgresChatMemory implements ChatMemory {
 
-    private final JdbcTemplate jdbcTemplate;
+    private final ChatMemoryMessageMapper chatMemoryMessageMapper;
 
     private final ObjectMapper objectMapper;
 
     private final int maxMessages;
 
-    public PostgresChatMemory(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper, int maxMessages) {
-        this.jdbcTemplate = jdbcTemplate;
+    public PostgresChatMemory(
+            ChatMemoryMessageMapper chatMemoryMessageMapper,
+            ObjectMapper objectMapper,
+            int maxMessages) {
+        this.chatMemoryMessageMapper = chatMemoryMessageMapper;
         this.objectMapper = objectMapper;
         this.maxMessages = maxMessages;
     }
@@ -43,34 +46,13 @@ public final class PostgresChatMemory implements ChatMemory {
             catch (JsonProcessingException ex) {
                 throw new IllegalStateException("Failed to serialize chat message", ex);
             }
-            jdbcTemplate.update(
-                    """
-                            INSERT INTO agent_ui.chat_memory_message (conversation_id, payload)
-                            VALUES (?, CAST(? AS jsonb))
-                            """,
-                    conversationId,
-                    json);
+            chatMemoryMessageMapper.insertMessage(conversationId, json);
         }
     }
 
     @Override
     public List<Message> get(String conversationId) {
-        List<String> jsonRows = jdbcTemplate.query(
-                """
-                        SELECT m.payload::text
-                        FROM agent_ui.chat_memory_message m
-                        JOIN (
-                            SELECT id
-                            FROM agent_ui.chat_memory_message
-                            WHERE conversation_id = ?
-                            ORDER BY id DESC
-                            LIMIT ?
-                        ) t ON m.id = t.id
-                        ORDER BY m.id ASC
-                        """,
-                (rs, rowNum) -> rs.getString(1),
-                conversationId,
-                maxMessages);
+        List<String> jsonRows = chatMemoryMessageMapper.selectRecentPayloadJson(conversationId, maxMessages);
         if (jsonRows.isEmpty()) {
             return Collections.emptyList();
         }
@@ -79,36 +61,27 @@ public final class PostgresChatMemory implements ChatMemory {
 
     @Override
     public void clear(String conversationId) {
-        jdbcTemplate.update(
-                "DELETE FROM agent_ui.chat_memory_message WHERE conversation_id = ?",
-                conversationId);
+        chatMemoryMessageMapper.deleteByConversationId(conversationId);
     }
 
     public List<TranscriptRow> listTranscript(String conversationId) {
-        return jdbcTemplate.query(
-                """
-                        SELECT id, created_at, payload::text
-                        FROM agent_ui.chat_memory_message
-                        WHERE conversation_id = ?
-                        ORDER BY id ASC
-                        """,
-                (rs, rowNum) -> {
-                    long id = rs.getLong("id");
-                    String createdAt = rs.getString("created_at");
-                    String payloadJson = rs.getString("payload");
-                    try {
-                        JsonNode node = objectMapper.readTree(payloadJson);
-                        return new TranscriptRow(
-                                id,
-                                createdAt,
-                                MessagePayloadCodec.displayRole(node),
-                                MessagePayloadCodec.toDisplayText(node));
-                    }
-                    catch (JsonProcessingException ex) {
-                        throw new IllegalStateException(ex);
-                    }
-                },
-                conversationId);
+        return chatMemoryMessageMapper.selectTranscriptByConversationId(conversationId).stream()
+                .map(this::toTranscriptRow)
+                .toList();
+    }
+
+    private TranscriptRow toTranscriptRow(ChatMemoryMessageRow row) {
+        try {
+            JsonNode node = objectMapper.readTree(row.getPayloadJson());
+            return new TranscriptRow(
+                    row.getId(),
+                    row.getCreatedAt(),
+                    MessagePayloadCodec.displayRole(node),
+                    MessagePayloadCodec.toDisplayText(node));
+        }
+        catch (JsonProcessingException ex) {
+            throw new IllegalStateException(ex);
+        }
     }
 
     public record TranscriptRow(long id, String createdAt, String role, String text) {
