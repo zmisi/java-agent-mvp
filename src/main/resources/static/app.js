@@ -6,7 +6,18 @@ const SETTINGS_KEY = "db-agent-ui-settings";
 const state = {
   activeId: null,
   openMenuId: null,
+  inFlight: false,
+  abortController: null,
+  loadingTimer: null,
+  loadingStartedAt: null,
 };
+
+const LOADING_HINTS = [
+  "正在理解问题…",
+  "正在调用模型与数据库工具…",
+  "查询可能涉及多轮 SQL，请稍候…",
+  "仍在处理，可点击右侧停止按钮中断",
+];
 
 const defaultSettings = () => ({
   theme: "system",
@@ -56,7 +67,7 @@ function showToast(text) {
 }
 
 async function api(path, options = {}) {
-  const { headers: hdr, ...rest } = options;
+  const { headers: hdr, signal, ...rest } = options;
   const headers = new Headers(hdr || {});
   const method = (rest.method || "GET").toUpperCase();
   const body = rest.body;
@@ -68,6 +79,7 @@ async function api(path, options = {}) {
   const res = await fetch(path, {
     ...rest,
     headers,
+    signal,
   });
   if (!res.ok) {
     const errBody = await res.text().catch(() => "");
@@ -116,12 +128,121 @@ function formatSessionTime(iso) {
 }
 
 function setComposerState(hasSession) {
+  if (state.inFlight) {
+    return;
+  }
   const hasText = $("input").value.trim().length > 0;
+  $("send").hidden = false;
+  $("stop").hidden = true;
   $("send").disabled = !hasSession || !hasText;
   $("input").disabled = false;
+  document.querySelector(".composer-inner")?.classList.remove("is-busy");
   $("input").placeholder = hasSession
     ? "询问数据库…（Enter 发送，Shift+Enter 换行）"
     : "请先选择左侧会话，或点击「新对话」";
+}
+
+function setComposerBusy(busy) {
+  const inner = document.querySelector(".composer-inner");
+  $("send").hidden = busy;
+  $("stop").hidden = !busy;
+  $("input").disabled = busy;
+  if (busy) {
+    inner?.classList.add("is-busy");
+    $("input").placeholder = "查询进行中…";
+  } else {
+    inner?.classList.remove("is-busy");
+    setComposerState(!!state.activeId);
+  }
+}
+
+function clearMessagesEmpty() {
+  $("messages").querySelectorAll(".messages-empty").forEach((el) => el.remove());
+}
+
+function appendUserBubble(text) {
+  clearMessagesEmpty();
+  const div = document.createElement("div");
+  div.className = "msg user";
+  div.innerHTML = `<div class="body">${escapeHtml(text)}</div>`;
+  $("messages").appendChild(div);
+  scrollMessagesToBottom();
+}
+
+function scrollMessagesToBottom() {
+  const box = $("messages");
+  box.scrollTop = box.scrollHeight;
+}
+
+function formatElapsed(ms) {
+  const sec = Math.floor(ms / 1000);
+  if (sec < 60) {
+    return `${sec} 秒`;
+  }
+  const min = Math.floor(sec / 60);
+  const rem = sec % 60;
+  return `${min} 分 ${rem} 秒`;
+}
+
+function showLoadingBubble() {
+  removeLoadingBubble();
+  clearMessagesEmpty();
+
+  const div = document.createElement("div");
+  div.className = "msg assistant msg-loading";
+  div.id = "chatLoading";
+  div.innerHTML = `
+    <div class="loading-card">
+      <div class="loading-row">
+        <span class="loading-dots" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span class="loading-text" id="loadingStatus">${LOADING_HINTS[0]}</span>
+      </div>
+      <span class="loading-elapsed" id="loadingElapsed">已用时 0 秒</span>
+      <span class="loading-hint">模型正在分析并可能多次查询数据库</span>
+    </div>
+  `;
+  $("messages").appendChild(div);
+  scrollMessagesToBottom();
+
+  state.loadingStartedAt = Date.now();
+  let hintIndex = 0;
+  const statusEl = () => document.getElementById("loadingStatus");
+  const elapsedEl = () => document.getElementById("loadingElapsed");
+
+  state.loadingTimer = window.setInterval(() => {
+    const elapsed = Date.now() - state.loadingStartedAt;
+    const el = elapsedEl();
+    if (el) {
+      el.textContent = `已用时 ${formatElapsed(elapsed)}`;
+    }
+    hintIndex = Math.min(LOADING_HINTS.length - 1, Math.floor(elapsed / 4000));
+    const st = statusEl();
+    if (st) {
+      st.textContent = LOADING_HINTS[hintIndex];
+    }
+    scrollMessagesToBottom();
+  }, 500);
+
+  return div;
+}
+
+function removeLoadingBubble() {
+  if (state.loadingTimer != null) {
+    window.clearInterval(state.loadingTimer);
+    state.loadingTimer = null;
+  }
+  state.loadingStartedAt = null;
+  document.getElementById("chatLoading")?.remove();
+}
+
+function abortInFlight() {
+  if (state.abortController) {
+    state.abortController.abort();
+  }
+}
+
+function isAbortError(err) {
+  return err && (err.name === "AbortError" || err.message === "The user aborted a request.");
 }
 
 function closeSessionMenu() {
@@ -216,6 +337,9 @@ async function refreshSessions(selectId) {
 }
 
 async function selectSession(id) {
+  if (state.inFlight && state.activeId !== id) {
+    abortInFlight();
+  }
   closeSessionMenu();
   state.activeId = id;
   const row = document.querySelector(`.session-row[data-id="${id}"]`);
@@ -302,7 +426,17 @@ async function deleteSession(id) {
   await refreshSessions(state.activeId);
 }
 
+function stopMessage() {
+  if (!state.inFlight) {
+    return;
+  }
+  abortInFlight();
+}
+
 async function sendMessage() {
+  if (state.inFlight) {
+    return;
+  }
   const text = $("input").value.trim();
   if (!text) {
     return;
@@ -312,22 +446,37 @@ async function sendMessage() {
     return;
   }
 
-  setComposerState(true);
-  $("send").disabled = true;
+  const conversationId = state.activeId;
+  appendUserBubble(text);
+  $("input").value = "";
+  autoResizeInput();
+
+  state.inFlight = true;
+  state.abortController = new AbortController();
+  setComposerBusy(true);
+  showLoadingBubble();
 
   try {
-    await api(`/api/conversations/${encodeURIComponent(state.activeId)}/chat`, {
+    await api(`/api/conversations/${encodeURIComponent(conversationId)}/chat`, {
       method: "POST",
       body: JSON.stringify({ message: text }),
+      signal: state.abortController.signal,
     });
-    $("input").value = "";
-    autoResizeInput();
-    await refreshSessions(state.activeId);
-    await selectSession(state.activeId);
+    removeLoadingBubble();
+    await refreshSessions(conversationId);
+    await selectSession(conversationId);
   } catch (e) {
-    showToast(String(e && e.message ? e.message : e));
+    removeLoadingBubble();
+    if (isAbortError(e)) {
+      showToast("已停止查询");
+    } else {
+      showToast(String(e && e.message ? e.message : e));
+      await selectSession(conversationId);
+    }
   } finally {
-    setComposerState(!!state.activeId);
+    state.inFlight = false;
+    state.abortController = null;
+    setComposerBusy(false);
     $("input").focus();
   }
 }
@@ -388,6 +537,7 @@ function wire() {
   });
 
   $("send").addEventListener("click", sendMessage);
+  $("stop").addEventListener("click", stopMessage);
 
   const input = $("input");
   input.addEventListener("input", () => {
@@ -398,7 +548,11 @@ function wire() {
   input.addEventListener("keydown", (ev) => {
     if (ev.key === "Enter" && !ev.shiftKey) {
       ev.preventDefault();
-      sendMessage();
+      if (state.inFlight) {
+        stopMessage();
+      } else {
+        sendMessage();
+      }
     }
   });
 
@@ -411,6 +565,10 @@ function wire() {
 
   document.addEventListener("keydown", (ev) => {
     if (ev.key === "Escape") {
+      if (state.inFlight) {
+        stopMessage();
+        return;
+      }
       closeSessionMenu();
       if (!$("settingsPanel").hidden) {
         closeSettings();
