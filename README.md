@@ -54,7 +54,10 @@ CLI 会话 ID 形如 `cli-<uuid>`，同样写入 `agent_ui`（启动时自动插
 - `POST /api/conversations` — 新建会话  
 - `GET /api/conversations/{id}/messages` — 某会话全部消息（展示用文本）  
 - `POST /api/conversations/{id}/chat` — body `{"message":"..."}`  
+- `PATCH /api/conversations/{id}` — body `{"title":"..."}` 重命名会话  
 - `DELETE /api/conversations/{id}` — 删除会话及消息  
+
+Web UI 支持：左侧会话 `…` 菜单（重命名 / 删除）、左下角**设置**（深色 / 浅色 / 跟随系统、字体大小，保存在浏览器 `localStorage`）。
 
 ## 故障排查
 

@@ -73,6 +73,18 @@ public class AgentConversationRepository {
                 id);
     }
 
+    public void updateTitle(String id, String newTitle, Instant now) {
+        jdbcTemplate.update(
+                """
+                        UPDATE agent_ui.conversation
+                        SET title = ?, updated_at = ?
+                        WHERE id = ?
+                        """,
+                newTitle,
+                Timestamp.from(now),
+                id);
+    }
+
     public void delete(String id) {
         jdbcTemplate.update("DELETE FROM agent_ui.conversation WHERE id = ?", id);
     }
