@@ -1,3 +1,21 @@
+app:
+  chat:
+    memory:
+      # Sliding window of USER/ASSISTANT messages per conversation (default in Spring AI: 20)
+      max-messages: 30
+
+logging:
+  level:
+    com.example.javaagentmvp.QwenApiLoggingAdvisor: ERROR
+#    com.alibaba.cloud.ai.dashscope: DEBUG
+#    com.alibaba.cloud.ai.dashscope.api: DEBUG
+#    com.alibaba.cloud.ai.dashscope.chat: DEBUG
+#    org.springframework.ai.chat.client: DEBUG
+#    org.springframework.ai.chat.model: DEBUG
+#    org.springframework.ai.model.tool: DEBUG
+#    org.springframework.ai.mcp: DEBUG
+#    org.springframework.web.client.RestClient: DEBUG
+
 spring:
   main:
     web-application-type: none  # CLI agent, do not start Netty web server
@@ -15,6 +33,7 @@ spring:
           servers-configuration: classpath:/mcp-servers-config.json
         toolcallback:
           enabled: true      # Auto register MCP as Spring AI Tool
+
 #    alibaba:
     dashscope:
       api-key: ${DASHSCOPE_API_KEY}
