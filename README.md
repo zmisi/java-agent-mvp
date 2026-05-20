@@ -36,8 +36,17 @@ CLI 会话 ID 形如 `cli-<uuid>`，同样写入 `agent_ui`（启动时自动插
 |------|------|
 | `spring.datasource.*` | 会话库 JDBC（默认 `jdbc:postgresql://127.0.0.1:5432/opstream`，用户 `postgres`） |
 | `AGENT_UI_DB_PASSWORD` | 数据库密码（可选） |
+| `app.agent.prompt.location` | System prompt 文件（默认 `classpath:prompts/db-agent-system.md`） |
+| `app.agent.prompt.schema` | Prompt 中 `{schema}` 占位符（默认 `public`） |
 | `app.chat.memory.max-messages` | 模型上下文窗口（默认 30 条 `Message`） |
 | `spring.ai.mcp.client.stdio.servers-configuration` | MCP 配置（Postgres MCP） |
+
+### System prompt（最佳实践）
+
+- 正文放在 **`src/main/resources/prompts/db-agent-system.md`**，与 Java 代码分离，便于评审和迭代。
+- 通过 `app.agent.prompt.location` 指向 classpath 或 `file:` 路径（例如 `file:./config/db-agent-system.md` 用于本机覆盖，无需改 jar）。
+- 文件中可用 `{schema}`，由 `app.agent.prompt.schema` 在启动时替换。
+- 启动时若文件不存在会 **fail-fast**，避免带着空 prompt 跑生产。
 
 ## 多轮对话与命令（CLI）
 

@@ -1,4 +1,10 @@
 app:
+  agent:
+    prompt:
+      # System prompt file (Markdown/plain text). Edit without recompiling Java.
+      location: classpath:prompts/db-agent-system.md
+      # Replaces {schema} placeholders in the prompt file
+      schema: public
   chat:
     memory:
       # Sliding window of USER/ASSISTANT/TOOL messages per conversation (model context)
