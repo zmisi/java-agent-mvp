@@ -8,7 +8,6 @@ import org.springframework.ai.chat.client.advisor.api.CallAdvisor;
 import org.springframework.ai.chat.client.advisor.api.CallAdvisorChain;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
-import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.ai.chat.metadata.ChatResponseMetadata;
 import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatResponse;
@@ -17,28 +16,27 @@ import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.core.Ordered;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
 
 /**
- * Logs each Qwen (DashScope) round-trip during {@link org.springframework.ai.chat.client.ChatClient} calls,
- * including prompt messages, tool calls, token usage, and latency.
+ * Logs each Qwen (DashScope) user turn: prompt messages, registered tools, model tool_calls,
+ * TOOL results (via {@link LoggingToolCallback}), and final assistant reply.
  */
 public class QwenApiLoggingAdvisor implements CallAdvisor {
 
     private static final Logger log = LoggerFactory.getLogger(QwenApiLoggingAdvisor.class);
 
-    private static final int MAX_TEXT_LENGTH = 2_000;
+    private static final ThreadLocal<Integer> ACTIVE_SESSION_ROUND = new ThreadLocal<>();
+
+    private static final ThreadLocal<Set<String>> LOGGED_TOOL_CALL_IDS = new ThreadLocal<>();
 
     private final AtomicInteger sessionRound = new AtomicInteger(0);
 
     private final int order;
 
-    /**
-     * Runs after {@link org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor}
-     * so logs include conversation history injected into the prompt.
-     */
     public QwenApiLoggingAdvisor() {
         this(Ordered.LOWEST_PRECEDENCE - 100);
     }
@@ -47,7 +45,22 @@ public class QwenApiLoggingAdvisor implements CallAdvisor {
         this.order = order;
     }
 
-    /** Reset round counter before each user question in the REPL. */
+    /** Active session round for {@link LoggingToolCallback} correlation (same HTTP /chat request). */
+    public static int activeSessionRound() {
+        Integer round = ACTIVE_SESSION_ROUND.get();
+        return round != null ? round : 0;
+    }
+
+    /** Per-request set of tool call ids already logged as model tool_calls. */
+    static Set<String> loggedToolCallIds() {
+        Set<String> ids = LOGGED_TOOL_CALL_IDS.get();
+        if (ids == null) {
+            ids = new HashSet<>();
+            LOGGED_TOOL_CALL_IDS.set(ids);
+        }
+        return ids;
+    }
+
     public void resetSessionRound() {
         sessionRound.set(0);
     }
@@ -55,6 +68,9 @@ public class QwenApiLoggingAdvisor implements CallAdvisor {
     @Override
     public ChatClientResponse adviseCall(ChatClientRequest request, CallAdvisorChain chain) {
         int round = sessionRound.incrementAndGet();
+        ACTIVE_SESSION_ROUND.set(round);
+        LOGGED_TOOL_CALL_IDS.set(new HashSet<>());
+
         long startNanos = System.nanoTime();
 
         log.info(">>> Qwen request [session round {}] model={}\n{}",
@@ -72,6 +88,10 @@ public class QwenApiLoggingAdvisor implements CallAdvisor {
             log.error("<<< Qwen error [session round {}, {} ms]: {}",
                     round, elapsedMs, ex.getMessage(), ex);
             throw ex;
+        }
+        finally {
+            ACTIVE_SESSION_ROUND.remove();
+            LOGGED_TOOL_CALL_IDS.remove();
         }
     }
 
@@ -98,49 +118,17 @@ public class QwenApiLoggingAdvisor implements CallAdvisor {
         StringBuilder sb = new StringBuilder();
         List<Message> messages = prompt.getInstructions();
         for (int i = 0; i < messages.size(); i++) {
-            sb.append("  [").append(i + 1).append("] ").append(formatMessage(messages.get(i))).append('\n');
+            sb.append("  [").append(i + 1).append("] ").append(QwenApiLogFormatting.formatMessage(messages.get(i)))
+                    .append('\n');
         }
         ChatOptions options = prompt.getOptions();
         if (options != null) {
             sb.append("  options: model=").append(options.getModel())
                     .append(", temperature=").append(options.getTemperature())
                     .append(", maxTokens=").append(options.getMaxTokens());
+            QwenApiLogFormatting.appendToolDefinitions(sb, options);
         }
         return sb.toString();
-    }
-
-    private static String formatMessage(Message message) {
-        return switch (message.getMessageType()) {
-            case SYSTEM -> "SYSTEM: " + truncate(extractText(message));
-            case USER -> "USER: " + truncate(extractText(message));
-            case ASSISTANT -> formatAssistant((AssistantMessage) message);
-            case TOOL -> formatToolResponse((ToolResponseMessage) message);
-            default -> message.getMessageType() + ": " + truncate(message.toString());
-        };
-    }
-
-    private static String formatAssistant(AssistantMessage message) {
-        StringBuilder sb = new StringBuilder("ASSISTANT");
-        String text = message.getText();
-        if (text != null && !text.isBlank()) {
-            sb.append(": ").append(truncate(text));
-        }
-        if (message.hasToolCalls()) {
-            sb.append("\n    tool_calls:");
-            for (AssistantMessage.ToolCall toolCall : message.getToolCalls()) {
-                sb.append("\n      - name=").append(toolCall.name())
-                        .append(", id=").append(toolCall.id())
-                        .append(", args=").append(truncate(toolCall.arguments()));
-            }
-        }
-        return sb.toString();
-    }
-
-    private static String formatToolResponse(ToolResponseMessage message) {
-        String responses = message.getResponses().stream()
-                .map(r -> "id=" + r.id() + ", name=" + r.name() + ", data=" + truncate(r.responseData()))
-                .collect(Collectors.joining("; "));
-        return "TOOL: " + responses;
     }
 
     private static String formatChatResponse(ChatResponse chatResponse) {
@@ -153,14 +141,14 @@ public class QwenApiLoggingAdvisor implements CallAdvisor {
             Generation generation = results.get(i);
             Message output = generation.getOutput();
             sb.append("  generation[").append(i + 1).append("]: ")
-                    .append(formatMessage(output));
+                    .append(QwenApiLogFormatting.formatMessage(output));
             if (generation.getMetadata() != null && generation.getMetadata().getFinishReason() != null) {
                 sb.append("\n    finishReason=").append(generation.getMetadata().getFinishReason());
             }
             sb.append('\n');
         }
         if (chatResponse.hasToolCalls()) {
-            sb.append("  hasToolCalls=true\n");
+            sb.append("  hasToolCalls=true (final ChatResponse; see tool_calls/TOOL lines above)\n");
         }
         ChatResponseMetadata metadata = chatResponse.getMetadata();
         if (metadata != null) {
@@ -176,28 +164,5 @@ public class QwenApiLoggingAdvisor implements CallAdvisor {
             }
         }
         return sb.toString();
-    }
-
-    private static String extractText(Message message) {
-        if (message instanceof AssistantMessage assistantMessage) {
-            return assistantMessage.getText();
-        }
-        try {
-            return message.getText();
-        }
-        catch (UnsupportedOperationException ex) {
-            return message.toString();
-        }
-    }
-
-    private static String truncate(String text) {
-        if (text == null) {
-            return "";
-        }
-        String normalized = text.replace("\r\n", "\n").strip();
-        if (normalized.length() <= MAX_TEXT_LENGTH) {
-            return normalized;
-        }
-        return normalized.substring(0, MAX_TEXT_LENGTH) + "... (" + normalized.length() + " chars total)";
     }
 }

@@ -1,6 +1,7 @@
 package com.example.javaagentmvp.chat;
 
 import com.example.javaagentmvp.ChatMemoryProperties;
+import com.example.javaagentmvp.LoggingToolCallback;
 import com.example.javaagentmvp.QwenApiLoggingAdvisor;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.client.McpSyncClient;
@@ -48,7 +49,8 @@ public class ChatClientConfiguration {
             ChatMemory chatMemory,
             QwenApiLoggingAdvisor qwenApiLoggingAdvisor,
             AgentSystemPrompt agentSystemPrompt) {
-        List<ToolCallback> toolCallbacks = SyncMcpToolCallbackProvider.syncToolCallbacks(mcpClients);
+        List<ToolCallback> toolCallbacks = LoggingToolCallback.wrapAll(
+                SyncMcpToolCallbackProvider.syncToolCallbacks(mcpClients));
 
         return chatClientBuilder
                 .defaultSystem(agentSystemPrompt.text())
