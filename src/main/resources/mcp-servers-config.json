@@ -1,10 +1,10 @@
 {
   "mcpServers": {
     "postgres-opstream": {
-      "command": "/Users/mizhang2/.nvm/versions/node/v22.22.3/bin/node",
+      "command": "/opt/homebrew/bin/node",
       "args": [
-        "/Users/mizhang2/.nvm/versions/node/v22.22.3/lib/node_modules/@modelcontextprotocol/server-postgres/dist/index.js",
-        "postgresql://postgres@127.0.0.1:5432/opstream?options=-c%20search_path%3Dpublic"
+        "/opt/homebrew/lib/node_modules/@modelcontextprotocol/server-postgres/dist/index.js",
+        "postgresql://timothy@127.0.0.1:5432/employees?options=-c%20search_path%3Demp"
       ]
     }
   }

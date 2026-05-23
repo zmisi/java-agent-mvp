@@ -15,7 +15,7 @@ public record AgentPromptProperties(
             location = "classpath:prompts/db-agent-system.md";
         }
         if (schema == null || schema.isBlank()) {
-            schema = "public";
+            schema = "emp";
         }
     }
 }

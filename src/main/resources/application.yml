@@ -4,7 +4,7 @@ app:
       # System prompt file (Markdown/plain text). Edit without recompiling Java.
       location: classpath:prompts/db-agent-system.md
       # Replaces {schema} placeholders in the prompt file
-      schema: public
+      schema: emp
   chat:
     memory:
       # Sliding window of USER/ASSISTANT/TOOL messages per conversation (model context)
@@ -31,8 +31,8 @@ mybatis:
 
 spring:
   datasource:
-    url: jdbc:postgresql://127.0.0.1:5432/opstream
-    username: postgres
+    url: jdbc:postgresql://127.0.0.1:5432/employees
+    username: ${AGENT_UI_DB_USER:timothy}
     password: ${AGENT_UI_DB_PASSWORD:}
     hikari:
       maximum-pool-size: 8
