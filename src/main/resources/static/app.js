@@ -359,7 +359,7 @@ async function selectSession(id) {
   if (msgs.length === 0) {
     const empty = document.createElement("div");
     empty.className = "messages-empty";
-    empty.textContent = "向数据库提问，例如：最近 5 条 opschange 记录";
+    empty.textContent = "向数据库提问，例如：每个部门有多少员工？";
     box.appendChild(empty);
     return;
   }

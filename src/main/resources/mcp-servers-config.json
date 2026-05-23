@@ -4,7 +4,7 @@
       "command": "/opt/homebrew/bin/node",
       "args": [
         "/opt/homebrew/lib/node_modules/@modelcontextprotocol/server-postgres/dist/index.js",
-        "postgresql://timothy@127.0.0.1:5432/employees?options=-c%20search_path%3Demp"
+        "postgresql://dbagent@127.0.0.1:5432/employees?options=-c%20search_path%3Demp"
       ]
     }
   }

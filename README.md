@@ -2,6 +2,70 @@
 
 PostgreSQL 只读查询 Agent（Spring AI + DashScope Qwen + MCP），带 **Web UI** 与 **会话持久化**（本机 PostgreSQL `agent_ui` schema）。
 
+## 容器一键运行（Docker / Podman）
+
+无需本机安装 Java、PostgreSQL、Node。项目提供 `Dockerfile` 与 `docker-compose.yml`，**Docker** 与 **Podman**（含 [Podman Desktop](https://podman-desktop.io/)）均可使用，命令将 `docker` 换成 `podman` 即可。
+
+需要阿里云 **DashScope API Key**。
+
+### Docker
+
+安装 [Docker](https://docs.docker.com/get-docker/)（含 Docker Compose）后：
+
+```bash
+cp .env.example .env
+# 编辑 .env，填入 DASHSCOPE_API_KEY
+
+docker compose up --build
+```
+
+### 使用 Podman
+
+1. 安装 [Podman Desktop](https://podman-desktop.io/)，在应用内完成 **Install Podman** 并启动 **Podman Machine**（状态为 Running）。
+2. 终端若提示 `command not found: podman`：新开一个终端窗口，或执行 `eval "$(/usr/libexec/path_helper -s)"`；仍不行则确认 `/opt/podman/bin/podman` 存在，并把 `export PATH="/opt/podman/bin:$PATH"` 写入 `~/.zshrc`。
+3. 在项目目录执行（与 Docker 相同，仅命令前缀不同）：
+
+```bash
+cp .env.example .env
+# 编辑 .env，填入 DASHSCOPE_API_KEY
+
+podman machine start    # 若 Machine 未运行
+podman compose up --build
+```
+
+常用对应关系：`docker compose` → `podman compose`，`docker compose down -v` → `podman compose down -v`，`docker compose exec postgres psql ...` → `podman compose exec postgres psql ...`。
+
+可选：在 `~/.zshrc` 中设置 `alias docker=podman`，即可继续写 `docker compose`。
+
+**拉镜像报 `unauthorized: incorrect username or password`（docker.io）**：多为 Podman 里保存了**错误的 Docker Hub 账号**。公开镜像不需要登录，先退出再构建：
+
+```bash
+podman logout docker.io
+# 若仍失败，检查并备份后删除错误凭据：
+#   ~/.config/containers/auth.json
+#   ~/.docker/config.json
+podman compose up --build
+```
+
+请优先使用 **`podman compose`**，不要用 `/usr/local/bin/docker-compose` 混用另一套凭据。本项目基础镜像已改为 [AWS Public ECR](https://gallery.ecr.aws/) 上的 `public.ecr.aws/docker/library/...`，减轻对 docker.io 登录的依赖。
+
+---
+
+启动后打开 **http://localhost:8080/**。Compose 会拉起：
+
+| 服务 | 说明 |
+|------|------|
+| `postgres` | PostgreSQL 16，库 `employees`，用户/密码 `agent`/`agent` |
+| `app` | Spring Boot（`docker` profile），内置 Node + Postgres MCP |
+
+首次启动时 `docker/postgres/init/` 会创建 **`emp`** schema 及与 [employees 示例库](https://github.com/datacharmer/test_db) 一致的 6 张表（`employee`、`department` 等），并导入约 500 名员工的子集；Flyway 在 **`agent_ui`** schema 建会话表。若需与本地全量数据一致，可运行 `./scripts/generate-docker-emp-seed.sh` 后执行 `compose down -v && compose up`（Docker 或 Podman 均可）。
+
+停止并删除数据卷：`docker compose down -v` 或 `podman compose down -v`
+
+**MCP 启动失败**（日志里 Node `v12`、`Unexpected token '.'`、或 `TimeoutException`）：镜像需 Node ≥16，请重新构建应用镜像：`docker compose build --no-cache app && docker compose up`（Podman 同理将 `docker` 改为 `podman`）。
+
+本机开发仍可用下方「运行（Web UI）」；容器环境使用 `application-docker.yml` 与 `mcp-servers-config.docker.json`，不影响本机 `mcp-servers-config.json`。
+
 ## 运行（Web UI，默认）
 
 1. 确保本机 PostgreSQL 可连接，且 `mcp-servers-config.json` 里的连接与 `application.yml` 的 `spring.datasource` 指向同一实例即可（库名默认 `opstream`）。

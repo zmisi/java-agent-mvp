@@ -32,8 +32,8 @@ mybatis:
 spring:
   datasource:
     url: jdbc:postgresql://127.0.0.1:5432/employees
-    username: ${AGENT_UI_DB_USER:timothy}
-    password: ${AGENT_UI_DB_PASSWORD:}
+    username: ${AGENT_UI_DB_USER}
+    password: ${AGENT_UI_DB_PASSWORD}
     hikari:
       maximum-pool-size: 8
 

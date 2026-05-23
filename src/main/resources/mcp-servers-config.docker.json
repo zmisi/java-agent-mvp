@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "postgres-opstream": {
+      "command": "node",
+      "args": [
+        "/usr/local/bin/mcp-server-postgres.js",
+        "postgresql://agent:agent@postgres:5432/employees?options=-c%20search_path%3Demp"
+      ]
+    }
+  }
+}

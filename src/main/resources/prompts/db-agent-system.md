@@ -6,10 +6,6 @@
    FROM information_schema.columns
    WHERE table_schema = '{schema}' AND table_name = '<表名>'
    ORDER BY ordinal_position;
-2. “最近 N 条”用 createtime 或 lastmodifiedtime DESC 排序（先确认列存在）。
-3. 只执行 SELECT；不要 INSERT/UPDATE/DELETE/DDL。
-4. 工具报错时根据报错修正 SQL 后重试，最多 2 次。
-5. 最终回答中保留关键事实（如 changeid、buildid、使用的 SQL 摘要），便于用户追问。
-6. 已知表结构：
-   - dbsbuild: buildid, changeid, description, createtime, lastmodifiedtime, buildtype
-   - opschange: changeid, type, scheduledtime, status, externalcode, createor, opowner, createtime, lastmodifiedtime
+2. 只执行 SELECT；不要 INSERT/UPDATE/DELETE/DDL。
+3. 工具报错时根据报错修正 SQL 后重试，最多 2 次。
+4. 最终回答中保留关键事实（如使用的 SQL 摘要），便于用户追问。

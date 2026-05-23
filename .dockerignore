@@ -1,0 +1,9 @@
+target/
+.git/
+.gitignore
+.DS_Store
+.idea/
+*.iml
+.env
+*.md
+!src/main/resources/prompts/*.md
