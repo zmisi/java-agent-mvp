@@ -3,8 +3,8 @@ package com.example.javaagentmvp.chat;
 import com.example.javaagentmvp.ChatMemoryProperties;
 import com.example.javaagentmvp.LoggingToolCallback;
 import com.example.javaagentmvp.QwenApiLoggingAdvisor;
+import com.example.javaagentmvp.dbagent.DbAgentTargetRegistry;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.modelcontextprotocol.client.McpSyncClient;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
@@ -45,12 +45,12 @@ public class ChatClientConfiguration {
     @Bean
     ChatClient chatClient(
             ChatClient.Builder chatClientBuilder,
-            List<McpSyncClient> mcpClients,
+            DbAgentTargetRegistry dbAgentTargetRegistry,
             ChatMemory chatMemory,
             QwenApiLoggingAdvisor qwenApiLoggingAdvisor,
             AgentSystemPrompt agentSystemPrompt) {
         List<ToolCallback> toolCallbacks = LoggingToolCallback.wrapAll(
-                SyncMcpToolCallbackProvider.syncToolCallbacks(mcpClients));
+                SyncMcpToolCallbackProvider.syncToolCallbacks(dbAgentTargetRegistry.chatMcpClients()));
 
         return chatClientBuilder
                 .defaultSystem(agentSystemPrompt.text())

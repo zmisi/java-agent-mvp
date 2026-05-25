@@ -13,10 +13,10 @@ const state = {
 };
 
 const LOADING_HINTS = [
-  "正在理解问题…",
-  "正在调用模型与数据库工具…",
-  "查询可能涉及多轮 SQL，请稍候…",
-  "仍在处理，可点击右侧停止按钮中断",
+  "Understanding your question…",
+  "Calling the model and database tools…",
+  "Query may run multiple SQL rounds, please wait…",
+  "Still working — click Stop to cancel",
 ];
 
 const defaultSettings = () => ({
@@ -138,8 +138,8 @@ function setComposerState(hasSession) {
   $("input").disabled = false;
   document.querySelector(".composer-inner")?.classList.remove("is-busy");
   $("input").placeholder = hasSession
-    ? "询问数据库…（⌘+Enter 发送，Enter 换行）"
-    : "请先选择左侧会话，或点击「新对话」";
+    ? "Ask about the database… (⌘+Enter to send)"
+    : "Select a chat on the left, or click New Chat";
 }
 
 function setComposerBusy(busy) {
@@ -149,7 +149,7 @@ function setComposerBusy(busy) {
   $("input").disabled = busy;
   if (busy) {
     inner?.classList.add("is-busy");
-    $("input").placeholder = "查询进行中…";
+    $("input").placeholder = "Query in progress…";
   } else {
     inner?.classList.remove("is-busy");
     setComposerState(!!state.activeId);
@@ -177,11 +177,11 @@ function scrollMessagesToBottom() {
 function formatElapsed(ms) {
   const sec = Math.floor(ms / 1000);
   if (sec < 60) {
-    return `${sec} 秒`;
+    return `${sec}s`;
   }
   const min = Math.floor(sec / 60);
   const rem = sec % 60;
-  return `${min} 分 ${rem} 秒`;
+  return `${min}m ${rem}s`;
 }
 
 function showLoadingBubble() {
@@ -197,8 +197,8 @@ function showLoadingBubble() {
         <span class="loading-dots" aria-hidden="true"><span></span><span></span><span></span></span>
         <span class="loading-text" id="loadingStatus">${LOADING_HINTS[0]}</span>
       </div>
-      <span class="loading-elapsed" id="loadingElapsed">已用时 0 秒</span>
-      <span class="loading-hint">模型正在分析并可能多次查询数据库</span>
+      <span class="loading-elapsed" id="loadingElapsed">Elapsed 0s</span>
+      <span class="loading-hint">The model may query the database multiple times</span>
     </div>
   `;
   $("messages").appendChild(div);
@@ -213,7 +213,7 @@ function showLoadingBubble() {
     const elapsed = Date.now() - state.loadingStartedAt;
     const el = elapsedEl();
     if (el) {
-      el.textContent = `已用时 ${formatElapsed(elapsed)}`;
+      el.textContent = `Elapsed ${formatElapsed(elapsed)}`;
     }
     hintIndex = Math.min(LOADING_HINTS.length - 1, Math.floor(elapsed / 4000));
     const st = statusEl();
@@ -250,7 +250,7 @@ function closeSessionMenu() {
   menu.hidden = true;
   menu.innerHTML = "";
   state.openMenuId = null;
-  document.querySelectorAll(".session-row.menu-open").forEach((el) => {
+  document.querySelectorAll(".sidebar-list-row.menu-open").forEach((el) => {
     el.classList.remove("menu-open");
   });
 }
@@ -259,16 +259,16 @@ function openSessionMenu(sessionId, anchorEl) {
   closeSessionMenu();
   state.openMenuId = sessionId;
 
-  const row = anchorEl.closest(".session-row");
+  const row = anchorEl.closest(".sidebar-list-row");
   if (row) {
     row.classList.add("menu-open");
   }
 
   const menu = $("sessionMenu");
   menu.innerHTML = `
-    <button type="button" class="dropdown-item" data-action="rename">重命名</button>
+    <button type="button" class="dropdown-item" data-action="rename">Rename</button>
     <div class="dropdown-divider" role="separator"></div>
-    <button type="button" class="dropdown-item danger" data-action="delete">删除会话</button>
+    <button type="button" class="dropdown-item danger" data-action="delete">Delete chat</button>
   `;
 
   const rect = anchorEl.getBoundingClientRect();
@@ -296,30 +296,32 @@ async function refreshSessions(selectId) {
 
   if (sessions.length === 0) {
     const empty = document.createElement("div");
-    empty.className = "messages-empty";
-    empty.style.padding = "24px 12px";
-    empty.textContent = "暂无会话，点击「新对话」开始";
+    empty.className = "sidebar-list-empty";
+    empty.textContent = "No chats yet";
     list.appendChild(empty);
     return;
   }
 
+  const chatViewActive = typeof releaseState === "undefined" || releaseState.view === "chat";
+  const activeId = selectId ?? state.activeId;
   for (const s of sessions) {
     const row = document.createElement("div");
-    row.className = "session-row" + (s.id === selectId ? " active" : "");
+    const isActive = chatViewActive && s.id === activeId;
+    row.className = "sidebar-list-row" + (isActive ? " active" : "");
     row.dataset.id = s.id;
 
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = "session-item";
-    btn.innerHTML = `<div class="session-title"></div>`;
-    btn.querySelector(".session-title").textContent = s.title || s.id;
+    btn.className = "sidebar-list-item";
+    btn.innerHTML = `<span class="sidebar-list-dot" aria-hidden="true"></span><span class="sidebar-list-text"></span>`;
+    btn.querySelector(".sidebar-list-text").textContent = s.title || s.id;
     btn.title = formatSessionTime(s.updatedAt || s.createdAt);
     btn.addEventListener("click", () => selectSession(s.id));
 
     const menuBtn = document.createElement("button");
     menuBtn.type = "button";
-    menuBtn.className = "session-menu-btn";
-    menuBtn.setAttribute("aria-label", "会话菜单");
+    menuBtn.className = "sidebar-list-menu-btn";
+    menuBtn.setAttribute("aria-label", "Chat menu");
     menuBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><circle cx="3" cy="7" r="1.2" fill="currentColor"/><circle cx="7" cy="7" r="1.2" fill="currentColor"/><circle cx="11" cy="7" r="1.2" fill="currentColor"/></svg>`;
     menuBtn.addEventListener("click", (ev) => {
       ev.stopPropagation();
@@ -337,20 +339,27 @@ async function refreshSessions(selectId) {
 }
 
 async function selectSession(id) {
+  if (typeof showView === "function") {
+    showView("chat");
+  }
   if (state.inFlight && state.activeId !== id) {
     abortInFlight();
   }
   closeSessionMenu();
   state.activeId = id;
-  const row = document.querySelector(`.session-row[data-id="${id}"]`);
-  const titleEl = row ? row.querySelector(".session-title") : null;
+  const row = document.querySelector(`.sidebar-list-row[data-id="${id}"]`);
+  const titleEl = row ? row.querySelector(".sidebar-list-text") : null;
   const title = titleEl ? titleEl.textContent : id;
   $("sessionTitle").textContent = title;
   setComposerState(true);
 
-  document.querySelectorAll(".session-row").forEach((el) => {
-    el.classList.toggle("active", el.dataset.id === id);
-  });
+  if (typeof updateSidebarActiveStates === "function") {
+    updateSidebarActiveStates();
+  } else {
+    document.querySelectorAll(".sidebar-list-row[data-id]").forEach((el) => {
+      el.classList.toggle("active", el.dataset.id === id);
+    });
+  }
 
   const msgs = await api(`/api/conversations/${encodeURIComponent(id)}/messages`);
   const box = $("messages");
@@ -359,7 +368,7 @@ async function selectSession(id) {
   if (msgs.length === 0) {
     const empty = document.createElement("div");
     empty.className = "messages-empty";
-    empty.textContent = "向数据库提问，例如：每个部门有多少员工？";
+    empty.textContent = "Ask about the database, e.g. How many employees per department?";
     box.appendChild(empty);
     return;
   }
@@ -387,15 +396,15 @@ async function createSession() {
 }
 
 async function renameSession(id) {
-  const row = document.querySelector(`.session-row[data-id="${id}"]`);
-  const current = row ? row.querySelector(".session-title").textContent : "";
-  const next = window.prompt("重命名会话", current);
+  const row = document.querySelector(`.sidebar-list-row[data-id="${id}"]`);
+  const current = row ? row.querySelector(".sidebar-list-text").textContent : "";
+  const next = window.prompt("Rename chat", current);
   if (next == null) {
     return;
   }
   const title = next.trim();
   if (!title) {
-    showToast("标题不能为空");
+    showToast("Title cannot be empty");
     return;
   }
   await api(`/api/conversations/${encodeURIComponent(id)}`, {
@@ -409,7 +418,7 @@ async function renameSession(id) {
 }
 
 async function deleteSession(id) {
-  if (!window.confirm("确定删除该会话？消息记录将一并删除。")) {
+  if (!window.confirm("Delete this chat and all messages?")) {
     return;
   }
   await api(`/api/conversations/${encodeURIComponent(id)}`, { method: "DELETE" });
@@ -418,9 +427,9 @@ async function deleteSession(id) {
     $("messages").innerHTML = "";
     const empty = document.createElement("div");
     empty.className = "messages-empty";
-    empty.textContent = "选择或创建一个会话";
+    empty.textContent = "Select or create a chat";
     $("messages").appendChild(empty);
-    $("sessionTitle").textContent = "选择或创建一个会话";
+    $("sessionTitle").textContent = "Select or create a chat";
     setComposerState(false);
   }
   await refreshSessions(state.activeId);
@@ -442,7 +451,7 @@ async function sendMessage() {
     return;
   }
   if (!state.activeId) {
-    showToast("请先选择或创建一个会话");
+    showToast("Select or create a chat first");
     return;
   }
 
@@ -468,7 +477,7 @@ async function sendMessage() {
   } catch (e) {
     removeLoadingBubble();
     if (isAbortError(e)) {
-      showToast("已停止查询");
+      showToast("Query stopped");
     } else {
       showToast(String(e && e.message ? e.message : e));
       await selectSession(conversationId);
@@ -529,11 +538,18 @@ function wireSettings() {
 
 function wire() {
   $("newChat").addEventListener("click", async () => {
+    if (typeof showView === "function") {
+      showView("chat");
+    }
     try {
       await createSession();
     } catch (e) {
       showToast(String(e && e.message ? e.message : e));
     }
+  });
+
+  $("createDbProvisioningBtn")?.addEventListener("click", () => {
+    showToast("DB provisioning flow is not available yet");
   });
 
   $("send").addEventListener("click", sendMessage);
@@ -560,7 +576,7 @@ function wire() {
 
   document.addEventListener("click", (ev) => {
     const menu = $("sessionMenu");
-    if (!menu.hidden && !ev.target.closest(".session-menu-btn") && !ev.target.closest("#sessionMenu")) {
+    if (!menu.hidden && !ev.target.closest(".sidebar-list-menu-btn") && !ev.target.closest("#sessionMenu")) {
       closeSessionMenu();
     }
   });
@@ -575,10 +591,16 @@ function wire() {
       if (!$("settingsPanel").hidden) {
         closeSettings();
       }
+      if (typeof closeReleaseModal === "function" && !$("releaseModal").hidden) {
+        closeReleaseModal();
+      }
     }
   });
 
   wireSettings();
+  if (typeof wireReleases === "function") {
+    wireReleases();
+  }
 }
 
 window.addEventListener("DOMContentLoaded", async () => {
@@ -591,7 +613,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   const box = $("messages");
   const empty = document.createElement("div");
   empty.className = "messages-empty";
-  empty.textContent = "选择或创建一个会话";
+  empty.textContent = "Select or create a chat";
   box.appendChild(empty);
 
   try {

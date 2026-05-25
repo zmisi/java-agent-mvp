@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "postgres-opstream": {
+    "postgres-emp-readonly": {
       "command": "node",
       "args": [
         "/usr/local/bin/mcp-server-postgres.js",

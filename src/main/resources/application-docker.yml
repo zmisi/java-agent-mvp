@@ -9,6 +9,20 @@ logging:
     org.springframework.ai.mcp: INFO
     org.springframework.web.client.RestClient: INFO
 
+app:
+  db-agent:
+    design-docs-path: file:./docs/design
+    releases-path: file:./db/releases
+    deploy-target: test-deploy
+    chat-target: chat-readonly
+    targets:
+      chat-readonly:
+        type: mcp
+        server: postgres-emp-readonly
+      test-deploy:
+        type: jdbc
+        schema: emp_test
+
 spring:
   datasource:
     url: jdbc:postgresql://postgres:5432/employees

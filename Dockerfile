@@ -5,6 +5,8 @@ COPY pom.xml mvnw ./
 COPY .mvn .mvn
 RUN chmod +x mvnw && ./mvnw -B -DskipTests dependency:go-offline
 COPY src src
+COPY docs/design docs/design
+COPY db/releases db/releases
 RUN ./mvnw -B -DskipTests package
 
 # Run (JRE + Node 20 for Postgres MCP stdio server; Ubuntu apt nodejs is v12)
@@ -20,5 +22,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /app/target/java-agent-mvp-*.jar app.jar
+COPY --from=build /app/docs/design docs/design
+COPY --from=build /app/db/releases db/releases
 EXPOSE 8080
 ENTRYPOINT ["java", "--enable-native-access=ALL-UNNAMED", "-jar", "app.jar"]

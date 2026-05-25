@@ -1,4 +1,18 @@
 app:
+  db-agent:
+    design-docs-path: file:./docs/design
+    releases-path: file:./db/releases
+    draft-sql-prompt-location: classpath:prompts/draft-sql-system.md
+    deploy-target: test-deploy
+    chat-target: chat-readonly
+    targets:
+      chat-readonly:
+        type: mcp
+        server: postgres-emp-readonly
+      test-deploy:
+        type: jdbc
+        schema: emp_test
+        # url/username/password optional — inherit from spring.datasource
   agent:
     prompt:
       # System prompt file (Markdown/plain text). Edit without recompiling Java.
@@ -30,6 +44,11 @@ mybatis:
     map-underscore-to-camel-case: true
 
 spring:
+  servlet:
+    multipart:
+      max-file-size: 2MB
+      max-request-size: 2MB
+
   datasource:
     url: jdbc:postgresql://127.0.0.1:5432/employees
     username: ${AGENT_UI_DB_USER}

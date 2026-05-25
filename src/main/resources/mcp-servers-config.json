@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "postgres-opstream": {
+    "postgres-emp-readonly": {
       "command": "/opt/homebrew/bin/node",
       "args": [
         "/opt/homebrew/lib/node_modules/@modelcontextprotocol/server-postgres/dist/index.js",

@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.javaagentmvp.dbagent.persistence.mapper.ReleaseMapper">
+
+    <insert id="insertRelease">
+        INSERT INTO db_agent.release (id, title, design_doc_path, status, created_at, updated_at)
+        VALUES (#{id}, #{title}, #{designDocPath}, #{status}, #{createdAt}, #{updatedAt})
+    </insert>
+
+    <update id="updateReleaseStatus">
+        UPDATE db_agent.release
+        SET status = #{status},
+            updated_at = #{updatedAt}
+        WHERE id = #{id}
+    </update>
+
+    <select id="selectReleaseById"
+            resultType="com.example.javaagentmvp.dbagent.persistence.model.ReleaseRow">
+        SELECT id,
+               title,
+               design_doc_path,
+               status,
+               created_at::text AS created_at,
+               updated_at::text AS updated_at
+        FROM db_agent.release
+        WHERE id = #{id}
+    </select>
+
+    <select id="listReleases"
+            resultType="com.example.javaagentmvp.dbagent.persistence.model.ReleaseRow">
+        SELECT id,
+               title,
+               design_doc_path,
+               status,
+               created_at::text AS created_at,
+               updated_at::text AS updated_at
+        FROM db_agent.release
+        ORDER BY updated_at DESC
+        LIMIT 200
+    </select>
+
+    <insert id="insertScript" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        INSERT INTO db_agent.release_script
+            (release_id, file_name, sql_content, status, review_comment, sort_order, created_at, updated_at)
+        VALUES (#{releaseId}, #{fileName}, #{sqlContent}, #{status}, #{reviewComment}, #{sortOrder},
+                #{createdAt}, #{updatedAt})
+    </insert>
+
+    <update id="updateScriptContent">
+        UPDATE db_agent.release_script
+        SET sql_content = #{sqlContent},
+            status = #{status},
+            review_comment = #{reviewComment},
+            updated_at = #{updatedAt}
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateScriptStatus">
+        UPDATE db_agent.release_script
+        SET status = #{status},
+            review_comment = #{reviewComment},
+            updated_at = #{updatedAt}
+        WHERE id = #{id}
+    </update>
+
+    <select id="selectScriptById"
+            resultType="com.example.javaagentmvp.dbagent.persistence.model.ReleaseScriptRow">
+        SELECT id,
+               release_id,
+               file_name,
+               sql_content,
+               status,
+               review_comment,
+               sort_order,
+               created_at,
+               updated_at
+        FROM db_agent.release_script
+        WHERE id = #{id}
+    </select>
+
+    <select id="listScriptsByReleaseId"
+            resultType="com.example.javaagentmvp.dbagent.persistence.model.ReleaseScriptRow">
+        SELECT id,
+               release_id,
+               file_name,
+               sql_content,
+               status,
+               review_comment,
+               sort_order,
+               created_at,
+               updated_at
+        FROM db_agent.release_script
+        WHERE release_id = #{releaseId}
+        ORDER BY sort_order, id
+    </select>
+
+    <insert id="insertDeployment" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        INSERT INTO db_agent.deployment (release_id, environment, status, log, started_at, finished_at)
+        VALUES (#{releaseId}, #{environment}, #{status}, #{log}, #{startedAt}, #{finishedAt})
+    </insert>
+
+    <update id="updateDeployment">
+        UPDATE db_agent.deployment
+        SET status = #{status},
+            log = #{log},
+            finished_at = #{finishedAt}
+        WHERE id = #{id}
+    </update>
+
+    <select id="selectDeploymentById"
+            resultType="com.example.javaagentmvp.dbagent.persistence.model.DeploymentRow">
+        SELECT id,
+               release_id,
+               environment,
+               status,
+               log,
+               started_at,
+               finished_at
+        FROM db_agent.deployment
+        WHERE id = #{id}
+    </select>
+
+    <select id="listDeploymentsByReleaseId"
+            resultType="com.example.javaagentmvp.dbagent.persistence.model.DeploymentRow">
+        SELECT id,
+               release_id,
+               environment,
+               status,
+               log,
+               started_at,
+               finished_at
+        FROM db_agent.deployment
+        WHERE release_id = #{releaseId}
+        ORDER BY started_at DESC
+        LIMIT 50
+    </select>
+
+</mapper>

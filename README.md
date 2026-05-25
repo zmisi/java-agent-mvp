@@ -23,31 +23,32 @@ docker compose up --build
 
 1. 安装 [Podman Desktop](https://podman-desktop.io/)，在应用内完成 **Install Podman** 并启动 **Podman Machine**（状态为 Running）。
 2. 终端若提示 `command not found: podman`：新开一个终端窗口，或执行 `eval "$(/usr/libexec/path_helper -s)"`；仍不行则确认 `/opt/podman/bin/podman` 存在，并把 `export PATH="/opt/podman/bin:$PATH"` 写入 `~/.zshrc`。
-3. 在项目目录执行（与 Docker 相同，仅命令前缀不同）：
+3. 在项目目录执行（**推荐用项目脚本**，避免误用 Docker Desktop 的 `docker-compose` / `docker-credential-desktop`）：
 
 ```bash
 cp .env.example .env
 # 编辑 .env，填入 DASHSCOPE_API_KEY
 
-podman machine start    # 若 Machine 未运行
-podman compose up --build
+./scripts/fix-podman-env.sh          # 首次使用 Podman 时执行一次
+./scripts/podman-compose.sh up --build
 ```
 
-常用对应关系：`docker compose` → `podman compose`，`docker compose down -v` → `podman compose down -v`，`docker compose exec postgres psql ...` → `podman compose exec postgres psql ...`。
+`podman machine start` 若提示 `already running` 可忽略。重建 DB 与镜像：`./scripts/podman-compose.sh down -v --rmi local && ./scripts/podman-compose.sh up --build`
 
-可选：在 `~/.zshrc` 中设置 `alias docker=podman`，即可继续写 `docker compose`。
+常用对应关系：`docker compose` → `./scripts/podman-compose.sh`，例如 `./scripts/podman-compose.sh exec postgres psql -U agent -d employees`。
 
-**拉镜像报 `unauthorized: incorrect username or password`（docker.io）**：多为 Podman 里保存了**错误的 Docker Hub 账号**。公开镜像不需要登录，先退出再构建：
+**不要**设置 `PODMAN_COMPOSE_PROVIDER=podman`（会把 `compose up` 变成错误的 `podman up`，报 `unknown flag: --build`）。裸命令 `podman compose` 也可能走有问题的外部 provider；请用 `./scripts/podman-compose.sh`。
+
+**`docker-credential-desktop: executable file not found`**：执行 `./scripts/fix-podman-env.sh` 去掉 `~/.docker/config.json` 里的 `"credsStore": "desktop"`，再用 `./scripts/podman-compose.sh`。
+
+**拉镜像报 `unauthorized`（docker.io）**：
 
 ```bash
 podman logout docker.io
-# 若仍失败，检查并备份后删除错误凭据：
-#   ~/.config/containers/auth.json
-#   ~/.docker/config.json
-podman compose up --build
+./scripts/podman-compose.sh up --build
 ```
 
-请优先使用 **`podman compose`**，不要用 `/usr/local/bin/docker-compose` 混用另一套凭据。本项目基础镜像已改为 [AWS Public ECR](https://gallery.ecr.aws/) 上的 `public.ecr.aws/docker/library/...`，减轻对 docker.io 登录的依赖。
+本项目基础镜像使用 [AWS Public ECR](https://gallery.ecr.aws/) 的 `public.ecr.aws/docker/library/...`，减轻对 docker.io 登录的依赖。
 
 ---
 
