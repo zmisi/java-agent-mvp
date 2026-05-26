@@ -36,6 +36,9 @@ function updateSidebarActiveStates() {
     const active = releaseState.view === "releases" && el.dataset.releaseId === releaseState.activeReleaseId;
     el.classList.toggle("active", active);
   });
+  if (typeof updateProvisioningSidebarActive === "function") {
+    updateProvisioningSidebarActive();
+  }
 }
 
 function showView(view) {
@@ -47,6 +50,8 @@ function showView(view) {
 
   $("chatView").hidden = view !== "chat";
   $("releasesView").hidden = view !== "releases";
+  const provView = $("provisioningView");
+  if (provView) provView.hidden = view !== "db-provisioning";
 
   updateSidebarActiveStates();
 

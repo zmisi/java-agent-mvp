@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.javaagentmvp.dbagent.provisioning.persistence.mapper.ProvisioningMapper">
+
+    <insert id="insertRequest">
+        INSERT INTO db_agent.provisioning_request
+            (id, title, host, ssh_port, ssh_user, auth_type, database_name, schema_name,
+             memory_mb, disk_gb, data_directory, extensions, db_owner_user,
+             pg_major_version, os_family, os_version_label, status,
+             error_summary, connection_hint, created_at, updated_at)
+        VALUES (#{id}, #{title}, #{host}, #{sshPort}, #{sshUser}, #{authType}, #{databaseName},
+                #{schemaName}, #{memoryMb}, #{diskGb}, #{dataDirectory}, #{extensions}::jsonb,
+                #{dbOwnerUser}, #{pgMajorVersion}, #{osFamily}, #{osVersionLabel}, #{status},
+                #{errorSummary}, #{connectionHint}, #{createdAt}::timestamptz,
+                #{updatedAt}::timestamptz)
+    </insert>
+
+    <update id="updateRequestStatus">
+        UPDATE db_agent.provisioning_request
+        SET status = #{status},
+            error_summary = #{errorSummary},
+            connection_hint = #{connectionHint},
+            updated_at = #{updatedAt}::timestamptz
+        WHERE id = #{id}
+    </update>
+
+    <select id="selectRequestById"
+            resultType="com.example.javaagentmvp.dbagent.provisioning.persistence.model.ProvisioningRequestRow">
+        SELECT id, title, host, ssh_port, ssh_user, auth_type, database_name, schema_name,
+               memory_mb, disk_gb, data_directory, extensions::text AS extensions,
+               db_owner_user, pg_major_version, os_family, os_version_label,
+               status, error_summary, connection_hint,
+               created_at::text AS created_at, updated_at::text AS updated_at
+        FROM db_agent.provisioning_request
+        WHERE id = #{id}
+    </select>
+
+    <select id="listRequests"
+            resultType="com.example.javaagentmvp.dbagent.provisioning.persistence.model.ProvisioningRequestRow">
+        SELECT id, title, host, ssh_port, ssh_user, auth_type, database_name, schema_name,
+               memory_mb, disk_gb, data_directory, extensions::text AS extensions,
+               db_owner_user, pg_major_version, os_family, os_version_label,
+               status, error_summary, connection_hint,
+               created_at::text AS created_at, updated_at::text AS updated_at
+        FROM db_agent.provisioning_request
+        ORDER BY updated_at DESC
+        LIMIT 200
+    </select>
+
+    <insert id="insertStep" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        INSERT INTO db_agent.provisioning_step
+            (request_id, step_name, status, log_text, sort_order, started_at, finished_at)
+        VALUES (#{requestId}, #{stepName}, #{status}, #{logText}, #{sortOrder},
+                #{startedAt}::timestamptz, #{finishedAt}::timestamptz)
+    </insert>
+
+    <update id="updateStep">
+        UPDATE db_agent.provisioning_step
+        SET status = #{status},
+            log_text = #{logText},
+            started_at = #{startedAt}::timestamptz,
+            finished_at = #{finishedAt}::timestamptz
+        WHERE request_id = #{requestId} AND step_name = #{stepName}
+    </update>
+
+    <select id="listStepsByRequestId"
+            resultType="com.example.javaagentmvp.dbagent.provisioning.persistence.model.ProvisioningStepRow">
+        SELECT id, request_id, step_name, status, log_text, sort_order,
+               started_at::text AS started_at, finished_at::text AS finished_at
+        FROM db_agent.provisioning_step
+        WHERE request_id = #{requestId}
+        ORDER BY sort_order
+    </select>
+
+    <update id="resetStepsForRequest">
+        UPDATE db_agent.provisioning_step
+        SET status = 'PENDING',
+            log_text = NULL,
+            started_at = NULL,
+            finished_at = NULL
+        WHERE request_id = #{requestId}
+    </update>
+</mapper>

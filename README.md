@@ -95,11 +95,55 @@ mvn spring-boot:run -Dspring-boot.run.profiles=cli
 
 CLI 会话 ID 形如 `cli-<uuid>`，同样写入 `agent_ui`（启动时自动插入 `conversation` 行）。
 
+## DB Provisioning（Create PG DB）
+
+侧边栏 **New DB Provisioning** 可在指定 Linux 主机上通过 MCP 异步安装 PostgreSQL 18、建库/schema 与扩展。Spring **不直连 SSH**，仅调用独立 stdio MCP 进程 **java-agent-mcp**。
+
+### Flyway（本地开发）
+
+若启动报 `Migration checksum mismatch for migration version 3`，说明 `V3__db_provisioning.sql` 在已执行后被修改过。在**开发库**可修复元数据：
+
+```bash
+mvn flyway:repair -Dflyway.user="$AGENT_UI_DB_USER"
+```
+
+（密码使用环境变量 `AGENT_UI_DB_PASSWORD`，与 `application.yml` 一致。）之后不要再改已应用的 `V3` 文件，新变更请新增 `V4__*.sql`。
+
+若曾跑过早期草稿版 V3（列名如 `server_target`），请确保已执行 `V4__provisioning_schema_align.sql`（`mvn flyway:migrate`）。
+
+### 准备 java-agent-mcp
+
+```bash
+cd java-agent-mcp
+npm install
+chmod +x bin/java-agent-mcp.js
+```
+
+可选环境变量：
+
+| 变量 | 说明 |
+|------|------|
+| `JAVA_AGENT_MCP_COMMAND` | 默认 `node`；若设为不存在的路径（如 `/usr/local/bin/java-agent-mcp`）会自动回退到 bundled 脚本 |
+| `JAVA_AGENT_MCP_SCRIPT` | 默认 `./java-agent-mcp/bin/java-agent-mcp.js` |
+
+若 shell 里曾 `export JAVA_AGENT_MCP_COMMAND=/usr/local/bin/java-agent-mcp` 但未安装，请 **unset** 该变量或改为 `node`。
+
+**支持的操作系统（PG 18）**：Ubuntu 22.04/24.04、RHEL/Rocky/Alma **8/9**。**不支持 RHEL/CentOS 7**（会使用错误的 PGDG 源导致 `PayloadIsZstd` 等错误）。
+
+### API
+
+- `GET /api/db-provisioning` — 任务列表  
+- `GET /api/db-provisioning/{id}` — 详情与分步日志（运行中可轮询）  
+- `POST /api/db-provisioning` — 提交表单并启动异步任务（SSH 凭证不落库）
+- `POST /api/db-provisioning/{id}/retry` — 对 **FAILED** / **CANCELLED** 任务重做（需重新提交 SSH 密码或私钥）  
+
 ## 配置摘要
 
 | 配置 | 说明 |
 |------|------|
 | `spring.datasource.*` | 会话库 JDBC（默认 `jdbc:postgresql://127.0.0.1:5432/opstream`，用户 `postgres`） |
+| `app.db-agent.provisioning-mcp-command` | Provisioning MCP 启动命令（默认 `node`） |
+| `app.db-agent.provisioning-mcp-args` | MCP 脚本参数（默认 `./java-agent-mcp/bin/java-agent-mcp.js`） |
 | `AGENT_UI_DB_PASSWORD` | 数据库密码（可选） |
 | `app.agent.prompt.location` | System prompt 文件（默认 `classpath:prompts/db-agent-system.md`） |
 | `app.agent.prompt.schema` | Prompt 中 `{schema}` 占位符（默认 `public`） |

@@ -957,6 +957,10 @@ body {
   left: 50%;
   transform: translate(-50%, -50%);
   width: min(400px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -965,6 +969,7 @@ body {
 
 .modal-header {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: space-between;
   padding: 14px 16px;
@@ -982,6 +987,82 @@ body {
   display: flex;
   flex-direction: column;
   gap: 20px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.prov-preflight-status.is-ok {
+  color: var(--success, #2d8a4e);
+}
+
+.prov-preflight-status.is-error {
+  color: var(--danger);
+}
+
+.prov-preflight-status.is-loading {
+  color: var(--text-muted, #6b7280);
+  font-weight: 500;
+}
+
+#provCheckTargetBtn.is-loading {
+  pointer-events: none;
+  opacity: 0.85;
+}
+
+#provCheckTargetSpinner {
+  display: none;
+  width: 12px;
+  height: 12px;
+  margin-right: 6px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  vertical-align: -2px;
+  animation: prov-spin 0.7s linear infinite;
+}
+
+#provCheckTargetBtn.is-loading #provCheckTargetSpinner {
+  display: inline-block;
+}
+
+@keyframes prov-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.prov-preflight-log-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.prov-preflight-log-wrap.is-active .prov-preflight-log {
+  border-color: var(--accent, #3b82f6);
+}
+
+.prov-preflight-log {
+  margin: 0;
+  max-height: 160px;
+  overflow: auto;
+  padding: 8px 10px;
+  font-size: 11px;
+  line-height: 1.45;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  background: var(--surface-elevated, rgba(0, 0, 0, 0.04));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+#provPgVersionSelect:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
 }
 
 .setting-group {
@@ -1084,6 +1165,12 @@ body {
 .btn-sm {
   padding: 6px 12px;
   font-size: var(--font-size-xs);
+}
+
+.release-detail-actions {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0 4px;
 }
 
 .release-detail {
@@ -1203,9 +1290,19 @@ body {
 
 .modal-actions {
   display: flex;
+  flex-shrink: 0;
   justify-content: flex-end;
   gap: 8px;
-  padding-top: 4px;
+  margin-top: auto;
+  padding-top: 12px;
+  position: sticky;
+  bottom: 0;
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--border);
+  margin-left: -16px;
+  margin-right: -16px;
+  margin-bottom: -16px;
+  padding: 12px 16px 16px;
 }
 
 .upload-dropzone {
@@ -1304,6 +1401,50 @@ body {
   background: var(--danger);
 }
 
+.release-workflow-step.is-running {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.release-workflow-step.is-running .release-workflow-dot {
+  width: 12px;
+  height: 12px;
+  background: transparent;
+  border: 2px solid var(--accent, #3b82f6);
+  border-right-color: transparent;
+  box-shadow: none;
+  animation: prov-spin 0.7s linear infinite;
+}
+
 .release-workflow-label {
   white-space: nowrap;
+}
+
+.prov-step-running-hint {
+  font-weight: 400;
+  color: var(--text-muted);
+  font-size: 0.92em;
+}
+
+.prov-running-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  font-size: var(--font-size-sm);
+  color: var(--text);
+  background: var(--surface-elevated, rgba(59, 130, 246, 0.08));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.prov-running-banner-spinner {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--accent, #3b82f6);
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: prov-spin 0.7s linear infinite;
 }

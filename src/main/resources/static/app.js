@@ -1,5 +1,8 @@
 /* global fetch API, marked */
-const $ = (id) => document.getElementById(id);
+/** Shared by app.js, releases.js, provisioning.js (must be `function`, not script-scoped const). */
+function $(id) {
+  return document.getElementById(id);
+}
 
 const SETTINGS_KEY = "db-agent-ui-settings";
 
@@ -548,10 +551,6 @@ function wire() {
     }
   });
 
-  $("createDbProvisioningBtn")?.addEventListener("click", () => {
-    showToast("DB provisioning flow is not available yet");
-  });
-
   $("send").addEventListener("click", sendMessage);
   $("stop").addEventListener("click", stopMessage);
 
@@ -593,6 +592,9 @@ function wire() {
       }
       if (typeof closeReleaseModal === "function" && !$("releaseModal").hidden) {
         closeReleaseModal();
+      }
+      if (typeof closeProvisioningModal === "function" && !$("provisioningModal").hidden) {
+        closeProvisioningModal();
       }
     }
   });

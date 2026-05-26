@@ -5,6 +5,11 @@ app:
     draft-sql-prompt-location: classpath:prompts/draft-sql-system.md
     deploy-target: test-deploy
     chat-target: chat-readonly
+    provisioning-mcp-command: ${JAVA_AGENT_MCP_COMMAND:node}
+    provisioning-mcp-args:
+      - ${JAVA_AGENT_MCP_SCRIPT:./java-agent-mcp/bin/java-agent-mcp.js}
+    # MCP tool call timeout (INSTALL_PG can take a long time on slow networks)
+    provisioning-timeout-seconds: 7200
     targets:
       chat-readonly:
         type: mcp
