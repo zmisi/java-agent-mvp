@@ -2,6 +2,8 @@ package com.example.javaagentmvp.web;
 
 import com.example.javaagentmvp.QwenApiLoggingAdvisor;
 import com.example.javaagentmvp.chat.AgentConversationRepository;
+import com.example.javaagentmvp.rag.RagFlowContext;
+import com.example.javaagentmvp.rag.RagSource;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.http.HttpStatus;
@@ -13,6 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/conversations")
@@ -42,23 +45,31 @@ public class ChatController {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "conversation not found");
         }
 
+        String message = body.message().strip();
+
         try {
             qwenApiLoggingAdvisor.resetSessionRound();
             String reply = chatClient.prompt()
-                    .user(body.message().strip())
+                    .user(message)
                     .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, conversationId))
                     .call()
                     .content();
 
-            Instant now = Instant.now();
-            conversationRepository.touchUpdatedAt(conversationId, now);
-            conversationRepository.updateTitleIfDefault(conversationId, trimTitle(body.message()), now);
-
-            return new ChatReplyDto(reply);
+            touchConversation(conversationId, message);
+            return new ChatReplyDto(reply, RagFlowContext.sources());
         }
         catch (RuntimeException ex) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, ex.getMessage(), ex);
         }
+        finally {
+            RagFlowContext.clear();
+        }
+    }
+
+    private void touchConversation(String conversationId, String message) {
+        Instant now = Instant.now();
+        conversationRepository.touchUpdatedAt(conversationId, now);
+        conversationRepository.updateTitleIfDefault(conversationId, trimTitle(message), now);
     }
 
     private static String trimTitle(String input) {
@@ -72,6 +83,6 @@ public class ChatController {
     public record ChatRequestDto(String message) {
     }
 
-    public record ChatReplyDto(String assistant) {
+    public record ChatReplyDto(String assistant, List<RagSource> sources) {
     }
 }

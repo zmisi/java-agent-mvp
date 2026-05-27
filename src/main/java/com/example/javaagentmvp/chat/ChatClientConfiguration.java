@@ -4,12 +4,18 @@ import com.example.javaagentmvp.ChatMemoryProperties;
 import com.example.javaagentmvp.LoggingToolCallback;
 import com.example.javaagentmvp.QwenApiLoggingAdvisor;
 import com.example.javaagentmvp.dbagent.DbAgentTargetRegistry;
+import com.example.javaagentmvp.rag.AdmissionsAnswerFormatAdvisor;
+import com.example.javaagentmvp.rag.ConditionalQuestionAnswerAdvisor;
+import com.example.javaagentmvp.rag.RagFlowLoggingAdvisor;
+import com.example.javaagentmvp.rag.RagFlowStartAdvisor;
+import com.example.javaagentmvp.rag.RagProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.mcp.SyncMcpToolCallbackProvider;
 import org.springframework.ai.tool.ToolCallback;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -18,7 +24,7 @@ import com.example.javaagentmvp.chat.persistence.mapper.ChatMemoryMessageMapper;
 import java.util.List;
 
 @Configuration
-@EnableConfigurationProperties(AgentPromptProperties.class)
+@EnableConfigurationProperties({AgentPromptProperties.class, RagProperties.class})
 public class ChatClientConfiguration {
 
     @Bean
@@ -48,16 +54,34 @@ public class ChatClientConfiguration {
             DbAgentTargetRegistry dbAgentTargetRegistry,
             ChatMemory chatMemory,
             QwenApiLoggingAdvisor qwenApiLoggingAdvisor,
-            AgentSystemPrompt agentSystemPrompt) {
+            AgentSystemPrompt agentSystemPrompt,
+            RagProperties ragProperties,
+            ObjectProvider<RagFlowStartAdvisor> ragFlowStartAdvisor,
+            ObjectProvider<AdmissionsAnswerFormatAdvisor> admissionsAnswerFormatAdvisor,
+            ObjectProvider<ConditionalQuestionAnswerAdvisor> conditionalQuestionAnswerAdvisor,
+            ObjectProvider<RagFlowLoggingAdvisor> ragFlowLoggingAdvisor) {
         List<ToolCallback> toolCallbacks = LoggingToolCallback.wrapAll(
                 SyncMcpToolCallbackProvider.syncToolCallbacks(dbAgentTargetRegistry.chatMcpClients()));
 
-        return chatClientBuilder
-                .defaultSystem(agentSystemPrompt.text())
+        var builder = chatClientBuilder
+                .defaultSystem(buildSystemPrompt(agentSystemPrompt, ragProperties))
                 .defaultToolCallbacks(toolCallbacks)
                 .defaultAdvisors(
                         MessageChatMemoryAdvisor.builder(chatMemory).build(),
-                        qwenApiLoggingAdvisor)
-                .build();
+                        qwenApiLoggingAdvisor);
+
+        ragFlowStartAdvisor.ifAvailable(builder::defaultAdvisors);
+        admissionsAnswerFormatAdvisor.ifAvailable(builder::defaultAdvisors);
+        conditionalQuestionAnswerAdvisor.ifAvailable(builder::defaultAdvisors);
+        ragFlowLoggingAdvisor.ifAvailable(builder::defaultAdvisors);
+
+        return builder.build();
+    }
+
+    private static String buildSystemPrompt(AgentSystemPrompt agentSystemPrompt, RagProperties ragProperties) {
+        if (!ragProperties.enabled() || ragProperties.contextAddon() == null || ragProperties.contextAddon().isBlank()) {
+            return agentSystemPrompt.text();
+        }
+        return agentSystemPrompt.text() + "\n\n" + ragProperties.contextAddon().strip();
     }
 }

@@ -82,8 +82,37 @@ mvn spring-boot:run
 4. 浏览器打开 `http://localhost:8080/`  
    - 左侧会话列表，**新对话** 创建会话；点选会话查看历史。  
    - 消息与模型侧窗口一致写入 `agent_ui.chat_memory_message`（含 tool 调用/结果 JSON）。
+   - 主 Chat 已集成 RAG：可问数据库，也可问内置 Markdown 知识库（如 `RAG 和微调有什么区别？`）。
 
 Flyway 会在 **`agent_ui`** schema 下创建 `conversation` 与 `chat_memory_message` 表，与业务 `public` 表隔离。
+
+## RAG（已集成到 Chat）
+
+主 Chat（`POST /api/conversations/{id}/chat`）在每次提问时会：
+
+1. 从 `src/main/resources/rag-docs/**/*.md` 检索相关片段（`SimpleVectorStore` + DashScope `text-embedding-v4`）。招生数据按学校分目录，例如 `rag-docs/hfut/`、`rag-docs/hfuu/`
+2. 通过 `QuestionAnswerAdvisor` 把检索上下文注入模型 Prompt
+3. 与原有 DB Agent（MCP 工具 + 会话记忆）共用同一个 `ChatClient`
+
+响应除 `assistant` 外还会返回 `sources`（命中的文档片段），Web UI 会在回答下方展示 Sources。
+
+示例问题：
+
+```text
+RAG 和微调有什么区别？
+这个 demo 用了什么向量库？
+每个部门有多少员工？
+```
+
+关闭 RAG：`app.rag.enabled=false`（恢复纯 DB Agent 行为）。
+
+路由规则（走 RAG 还是走 MCP 查库）在 `application.yml` 的 `app.rag.routing.rag-patterns` / `database-patterns` 中配置（Java 正则，不区分大小写），改配置即可扩展，无需改 Java。
+
+招生类问题（含分数/专业等关键词且未点名学校）会按 `app.rag.admissions.schools` 对每所大学分别检索并合并；回答格式由 `app.rag.admissions.answer-format-template` 约束（按学校分组输出）。
+
+后端 RAG 日志步骤标签（`RagFlowLogStep`）：`[question]` → `[retrieve]` →（多校时）`[format]` → `[prompt]` → `[answer]`。
+
+这是教学版实现，没有上传文件、爬虫或持久化向量库。后续升级路线是：先把 `SimpleVectorStore` 换成 pgvector，再增加文档上传和后台索引任务。
 
 ## CLI 模式（可选）
 

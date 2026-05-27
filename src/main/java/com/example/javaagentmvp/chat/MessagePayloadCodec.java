@@ -9,6 +9,7 @@ import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.content.Media;
 
 import java.util.ArrayList;
@@ -29,7 +30,7 @@ public final class MessagePayloadCodec {
             case USER -> {
                 ObjectNode n = mapper.createObjectNode();
                 n.put("kind", "user");
-                n.put("text", message.getText());
+                n.put("text", UserMessageTextCleaner.clean(message.getText()));
                 yield n;
             }
             case ASSISTANT -> {
@@ -75,7 +76,7 @@ public final class MessagePayloadCodec {
     public static Message fromJson(JsonNode node, ObjectMapper mapper) {
         String kind = node.path("kind").asText("").toLowerCase();
         return switch (kind) {
-            case "user" -> new UserMessage(node.path("text").asText(""));
+            case "user" -> new UserMessage(UserMessageTextCleaner.clean(node.path("text").asText("")));
             case "system" -> new SystemMessage(node.path("text").asText(""));
             case "assistant" -> {
                 String text = node.path("text").asText("");
@@ -115,7 +116,7 @@ public final class MessagePayloadCodec {
     public static String toDisplayText(JsonNode node) {
         String kind = node.path("kind").asText("").toLowerCase();
         return switch (kind) {
-            case "user", "system" -> node.path("text").asText("");
+            case "user", "system" -> UserMessageTextCleaner.clean(node.path("text").asText(""));
             case "assistant" -> {
                 String text = node.path("text").asText("");
                 JsonNode toolCallsNode = node.get("toolCalls");

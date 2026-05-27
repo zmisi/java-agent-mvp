@@ -141,7 +141,7 @@ function setComposerState(hasSession) {
   $("input").disabled = false;
   document.querySelector(".composer-inner")?.classList.remove("is-busy");
   $("input").placeholder = hasSession
-    ? "Ask about the database… (⌘+Enter to send)"
+    ? "Ask about the database or docs… (⌘+Enter to send)"
     : "Select a chat on the left, or click New Chat";
 }
 
@@ -371,7 +371,7 @@ async function selectSession(id) {
   if (msgs.length === 0) {
     const empty = document.createElement("div");
     empty.className = "messages-empty";
-    empty.textContent = "Ask about the database, e.g. How many employees per department?";
+    empty.textContent = "Ask about the database or docs, e.g. RAG 和微调有什么区别？";
     box.appendChild(empty);
     return;
   }
@@ -445,6 +445,35 @@ function stopMessage() {
   abortInFlight();
 }
 
+function formatRagSources(sources) {
+  if (!sources || sources.length === 0) {
+    return "";
+  }
+  const items = sources
+    .map((source) => {
+      const school = source.school ? `<span class="rag-source-school">${escapeHtml(source.school)}</span>` : "";
+      const title = source.title || source.source || "unknown";
+      const snippet = source.snippet || "";
+      return `<li>${school}<strong>${escapeHtml(title)}</strong><span>${escapeHtml(snippet)}</span></li>`;
+    })
+    .join("");
+  return `<div class="rag-sources"><div class="rag-sources-title">Sources</div><ol>${items}</ol></div>`;
+}
+
+function appendSourcesToLastAssistant(sources) {
+  const assistants = $("messages").querySelectorAll(".msg.assistant");
+  const last = assistants[assistants.length - 1];
+  if (!last || last.classList.contains("msg-loading")) {
+    return;
+  }
+  const body = last.querySelector(".body");
+  if (!body || body.querySelector(".rag-sources")) {
+    return;
+  }
+  body.insertAdjacentHTML("beforeend", formatRagSources(sources));
+  scrollMessagesToBottom();
+}
+
 async function sendMessage() {
   if (state.inFlight) {
     return;
@@ -469,7 +498,7 @@ async function sendMessage() {
   showLoadingBubble();
 
   try {
-    await api(`/api/conversations/${encodeURIComponent(conversationId)}/chat`, {
+    const reply = await api(`/api/conversations/${encodeURIComponent(conversationId)}/chat`, {
       method: "POST",
       body: JSON.stringify({ message: text }),
       signal: state.abortController.signal,
@@ -477,6 +506,9 @@ async function sendMessage() {
     removeLoadingBubble();
     await refreshSessions(conversationId);
     await selectSession(conversationId);
+    if (reply && reply.sources && reply.sources.length > 0) {
+      appendSourcesToLastAssistant(reply.sources);
+    }
   } catch (e) {
     removeLoadingBubble();
     if (isAbortError(e)) {

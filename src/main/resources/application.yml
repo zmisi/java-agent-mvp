@@ -28,10 +28,60 @@ app:
     memory:
       # Sliding window of USER/ASSISTANT/TOOL messages per conversation (model context)
       max-messages: 30
+  rag:
+    enabled: true
+    document-location-pattern: classpath:/rag-docs/**/*.md
+    top-k: 4
+    max-distance: 0.70
+    route-database-queries: true
+    context-addon: >
+      仅当用户消息中已注入知识库检索上下文时，才用这些资料回答 RAG、Spring AI
+      或本项目文档类问题。数据库表结构、SQL、统计类问题必须用 MCP 工具查询 PostgreSQL。
+    routing:
+      # 命中任一条即走 RAG（优先于 database-patterns）。Java 正则，不区分大小写。
+      rag-patterns:
+        - '\brag\b'
+        - 'spring\s*ai|questionansweradvisor|simplevectorstore|embedding|vector\s*store'
+        - '微调|知识库|向量|检索增强|文档问答'
+        - '招生|录取|分数|专业|高考|考生|志愿|合工大|合肥工业大学|安徽'
+      # 命中任一条即跳过 RAG，仅走 MCP 查库。使用词/短语，避免单字误匹配（如「合工大」误命中「工」）。
+      database-patterns:
+        - '\b(list|show|describe|desc)\b[\s\S]{0,40}\btables?\b|\btables?\b[\s\S]{0,20}\b(list|show|all)\b'
+        - '\b(information_schema|table_schema|table_name|column_name)\b'
+        - '\b(schema|column|columns|row|rows|record|records)\b'
+        - '\b(select|insert|update|delete|from|where|join|group by|order by)\b'
+        - '\b(employee|department|salary|title|postgres|postgresql|sql|database|db)\b'
+        - '\b(how many|count|aggregate|sum|avg|max|min)\b'
+        - '数据库|数据表|表结构|表名|列名|员工|部门|薪资|统计'
+    admissions:
+      # 对“录取/分数/专业”等招生问题，如果用户没点名学校，则对所有 schools 做一次检索并合并结果。
+      enabled: true
+      intent-keywords: [ '招生', '录取', '分数', '分数线', '投档', '专业', '志愿', '高考', '考生' ]
+      per-school-top-k: 4
+      total-top-k: 12
+      answer-format-template: |
+        回答格式要求（必须遵守）：
+        1. 按学校分组输出，每个学校单独成段，标题使用学校中文全称。
+        2. 每所学校下列出与考生分数相关的专业、录取分数/投档线等信息；注明资料来源文件名。
+        3. 若某学校在上下文中没有分数或专业信息，明确写「资料未包含该校录取分数」。
+        4. 仅根据上下文回答，不得编造；缺少省份、科类、批次、校区等信息时，向用户追问。
+      schools:
+        - key: hfut
+          display-name: 合肥工业大学
+          aliases: [ 合工大, 合肥工业大学, HFUT ]
+          path-contains: [ '/hfut/', 'hfut/' ]
+        - key: hfuu
+          display-name: 合肥大学
+          aliases: [ 合肥大学, HFUU ]
+          path-contains: [ '/hfuu/', 'hfuu/' ]
 
 logging:
   level:
     org.flywaydb: INFO
+    com.example.javaagentmvp.rag: INFO
+    com.example.javaagentmvp.rag.RagFlowLoggingAdvisor: INFO
+    com.example.javaagentmvp.rag.RagFlowStartAdvisor: INFO
+    com.example.javaagentmvp.rag.RagRetrievalService: INFO
     com.example.javaagentmvp.QwenApiLoggingAdvisor: INFO
     com.alibaba.cloud.ai.dashscope: DEBUG
     com.alibaba.cloud.ai.dashscope.api: DEBUG
@@ -89,6 +139,9 @@ spring:
         options:
           model: qwen-plus
           temperature: 0.0
+      embedding:
+        options:
+          model: text-embedding-v4
 
 server:
   port: 8080
