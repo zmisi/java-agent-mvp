@@ -103,6 +103,12 @@ public class RagVectorStoreConfiguration {
         if (lower.contains("/hfuu/")) {
             return "hfuu";
         }
+        if (lower.contains("/aust/")) {
+            return "aust";
+        }
+        if (lower.contains("/ahau/")) {
+            return "ahau";
+        }
         return "";
     }
 }

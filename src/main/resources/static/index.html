@@ -80,18 +80,39 @@
       </header>
       <section id="messages" class="messages"></section>
       <footer class="composer">
-        <div class="composer-inner">
-          <textarea id="input" rows="1" placeholder="Ask about the database or docs… (⌘+Enter to send)"></textarea>
-          <button id="send" type="button" class="btn btn-send" disabled title="Send">
-            <svg class="icon-send" width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-              <path d="M3.5 9h11M9.5 4.5 15 9l-5.5 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </button>
-          <button id="stop" type="button" class="btn btn-stop" hidden title="Stop">
-            <svg class="icon-stop" width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-              <rect x="5" y="5" width="8" height="8" rx="1.5" fill="currentColor"/>
-            </svg>
-          </button>
+        <div class="composer-stack">
+          <div id="contextUsagePanel" class="context-usage-panel" hidden role="region" aria-label="Estimated context usage">
+            <div class="context-usage-panel-head">
+              <span class="context-usage-panel-title">Context (estimated)</span>
+              <button type="button" class="context-usage-close" id="contextUsageClose" aria-label="Close">×</button>
+            </div>
+            <p id="contextUsageSummary" class="context-usage-summary"></p>
+            <div id="contextUsageBar" class="context-usage-stacked" aria-hidden="true"></div>
+            <table class="context-usage-table" id="contextUsageTable">
+              <thead><tr><th>Category</th><th>Est. tokens</th><th>Chars</th></tr></thead>
+              <tbody id="contextUsageTbody"></tbody>
+            </table>
+            <p class="context-usage-footnote">Heuristic only (not tokenizer-accurate). Tune <code>app.chat.context-window.max-input-tokens</code> for %.</p>
+          </div>
+          <div class="composer-inner">
+            <textarea id="input" rows="1" placeholder="Ask about the database or docs… (⌘+Enter to send)"></textarea>
+            <button id="send" type="button" class="btn btn-send" disabled title="Send">
+              <svg class="icon-send" width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                <path d="M3.5 9h11M9.5 4.5 15 9l-5.5 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            <button id="stop" type="button" class="btn btn-stop" hidden title="Stop">
+              <svg class="icon-stop" width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                <rect x="5" y="5" width="8" height="8" rx="1.5" fill="currentColor"/>
+              </svg>
+            </button>
+          </div>
+          <div class="composer-meta">
+            <button type="button" id="contextUsageBtn" class="context-usage-btn" hidden aria-expanded="false" aria-controls="contextUsagePanel" title="Estimated input context (last message sent)">
+              <span class="context-usage-ring" id="contextUsageRing" aria-hidden="true"></span>
+              <span id="contextUsagePct" class="context-usage-pct">—</span>
+            </button>
+          </div>
         </div>
       </footer>
     </main>

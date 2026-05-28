@@ -2,11 +2,16 @@ package com.example.javaagentmvp.web;
 
 import com.example.javaagentmvp.QwenApiLoggingAdvisor;
 import com.example.javaagentmvp.chat.AgentConversationRepository;
+import com.example.javaagentmvp.chat.context.ChatContextUsageRegistry;
+import com.example.javaagentmvp.chat.context.ContextUsageResponse;
 import com.example.javaagentmvp.rag.RagFlowContext;
 import com.example.javaagentmvp.rag.RagSource;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -27,20 +32,32 @@ public class ChatController {
 
     private final AgentConversationRepository conversationRepository;
 
+    private final ChatContextUsageRegistry chatContextUsageRegistry;
+
+    private final String activeProvider;
+
     public ChatController(
             ChatClient chatClient,
             QwenApiLoggingAdvisor qwenApiLoggingAdvisor,
-            AgentConversationRepository conversationRepository) {
+            AgentConversationRepository conversationRepository,
+            ChatContextUsageRegistry chatContextUsageRegistry,
+            @Value("${app.llm.provider:local}") String activeProvider) {
         this.chatClient = chatClient;
         this.qwenApiLoggingAdvisor = qwenApiLoggingAdvisor;
         this.conversationRepository = conversationRepository;
+        this.chatContextUsageRegistry = chatContextUsageRegistry;
+        this.activeProvider = activeProvider.strip().toLowerCase();
     }
 
     @PostMapping("/{conversationId}/chat")
-    public ChatReplyDto chat(@PathVariable String conversationId, @RequestBody ChatRequestDto body) {
+    public ChatReplyDto chat(
+            @PathVariable String conversationId,
+            @RequestBody ChatRequestDto body,
+            @RequestHeader(value = "X-LLM-Provider", required = false) String requestedProvider) {
         if (body == null || body.message() == null || body.message().isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "message is required");
         }
+        validateRequestedProvider(requestedProvider);
         if (!conversationRepository.exists(conversationId)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "conversation not found");
         }
@@ -55,10 +72,12 @@ public class ChatController {
                     .call()
                     .content();
 
+            ContextUsageResponse contextUsage = chatContextUsageRegistry.consume();
             touchConversation(conversationId, message);
-            return new ChatReplyDto(reply, RagFlowContext.sources());
+            return new ChatReplyDto(reply, RagFlowContext.sources(), contextUsage);
         }
         catch (RuntimeException ex) {
+            chatContextUsageRegistry.consume();
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, ex.getMessage(), ex);
         }
         finally {
@@ -80,9 +99,25 @@ public class ChatController {
         return oneLine;
     }
 
+    private void validateRequestedProvider(String requestedProvider) {
+        if (requestedProvider == null || requestedProvider.isBlank()) {
+            return;
+        }
+        String normalized = requestedProvider.strip().toLowerCase();
+        if (!normalized.equals("local") && !normalized.equals("online")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "X-LLM-Provider must be local or online");
+        }
+        if (!normalized.equals(activeProvider)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "X-LLM-Provider=" + normalized + " does not match active profile provider=" + activeProvider);
+        }
+    }
+
     public record ChatRequestDto(String message) {
     }
 
-    public record ChatReplyDto(String assistant, List<RagSource> sources) {
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record ChatReplyDto(String assistant, List<RagSource> sources, ContextUsageResponse contextUsage) {
     }
 }

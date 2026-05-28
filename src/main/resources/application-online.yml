@@ -1,0 +1,23 @@
+app:
+  llm:
+    provider: online
+
+spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.ai.model.ollama.autoconfigure.OllamaChatAutoConfiguration
+      - org.springframework.ai.model.ollama.autoconfigure.OllamaEmbeddingAutoConfiguration
+  ai:
+    model:
+      chat: dashscope
+      embedding: dashscope
+    dashscope:
+      # API Key: https://dashscope.console.aliyun.com/apiKey
+      api-key: ${DASHSCOPE_API_KEY}
+      chat:
+        options:
+          model: ${DASHSCOPE_CHAT_MODEL:qwen-plus}
+          temperature: 0.0
+      embedding:
+        options:
+          model: ${DASHSCOPE_EMBEDDING_MODEL:text-embedding-v4}

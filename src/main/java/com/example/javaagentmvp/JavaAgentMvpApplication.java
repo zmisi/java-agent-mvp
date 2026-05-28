@@ -6,7 +6,11 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 
 @SpringBootApplication
-@EnableConfigurationProperties({ChatMemoryProperties.class, com.example.javaagentmvp.dbagent.DbAgentProperties.class})
+@EnableConfigurationProperties({
+        ChatMemoryProperties.class,
+        com.example.javaagentmvp.chat.context.ChatContextWindowProperties.class,
+        com.example.javaagentmvp.dbagent.DbAgentProperties.class
+})
 @MapperScan({
         "com.example.javaagentmvp.chat.persistence.mapper",
         "com.example.javaagentmvp.dbagent.persistence.mapper",

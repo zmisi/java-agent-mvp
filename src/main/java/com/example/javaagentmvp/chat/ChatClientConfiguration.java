@@ -19,6 +19,9 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import com.example.javaagentmvp.chat.context.ChatContextUsageAdvisor;
+import com.example.javaagentmvp.chat.context.ChatContextUsageRegistry;
+import com.example.javaagentmvp.chat.context.ChatContextWindowProperties;
 import com.example.javaagentmvp.chat.persistence.mapper.ChatMemoryMessageMapper;
 
 import java.util.List;
@@ -49,6 +52,13 @@ public class ChatClientConfiguration {
     }
 
     @Bean
+    ChatContextUsageAdvisor chatContextUsageAdvisor(
+            ChatContextWindowProperties chatContextWindowProperties,
+            ChatContextUsageRegistry chatContextUsageRegistry) {
+        return new ChatContextUsageAdvisor(chatContextWindowProperties, chatContextUsageRegistry);
+    }
+
+    @Bean
     ChatClient chatClient(
             ChatClient.Builder chatClientBuilder,
             DbAgentTargetRegistry dbAgentTargetRegistry,
@@ -59,7 +69,8 @@ public class ChatClientConfiguration {
             ObjectProvider<RagFlowStartAdvisor> ragFlowStartAdvisor,
             ObjectProvider<AdmissionsAnswerFormatAdvisor> admissionsAnswerFormatAdvisor,
             ObjectProvider<ConditionalQuestionAnswerAdvisor> conditionalQuestionAnswerAdvisor,
-            ObjectProvider<RagFlowLoggingAdvisor> ragFlowLoggingAdvisor) {
+            ObjectProvider<RagFlowLoggingAdvisor> ragFlowLoggingAdvisor,
+            ChatContextUsageAdvisor chatContextUsageAdvisor) {
         List<ToolCallback> toolCallbacks = LoggingToolCallback.wrapAll(
                 SyncMcpToolCallbackProvider.syncToolCallbacks(dbAgentTargetRegistry.chatMcpClients()));
 
@@ -68,7 +79,8 @@ public class ChatClientConfiguration {
                 .defaultToolCallbacks(toolCallbacks)
                 .defaultAdvisors(
                         MessageChatMemoryAdvisor.builder(chatMemory).build(),
-                        qwenApiLoggingAdvisor);
+                        qwenApiLoggingAdvisor,
+                        chatContextUsageAdvisor);
 
         ragFlowStartAdvisor.ifAvailable(builder::defaultAdvisors);
         admissionsAnswerFormatAdvisor.ifAvailable(builder::defaultAdvisors);

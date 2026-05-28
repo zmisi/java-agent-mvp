@@ -28,6 +28,9 @@ app:
     memory:
       # Sliding window of USER/ASSISTANT/TOOL messages per conversation (model context)
       max-messages: 30
+    # Declared input budget for UI % (tune to your model; observability only)
+    context-window:
+      max-input-tokens: 131072
   rag:
     enabled: true
     document-location-pattern: classpath:/rag-docs/**/*.md
@@ -43,7 +46,7 @@ app:
         - '\brag\b'
         - 'spring\s*ai|questionansweradvisor|simplevectorstore|embedding|vector\s*store'
         - '微调|知识库|向量|检索增强|文档问答'
-        - '招生|录取|分数|专业|高考|考生|志愿|合工大|合肥工业大学|安徽'
+        - '招生|录取|分数|专业|高考|考生|志愿|合工大|合肥工业大学|安理工|安徽理工大学|安农大|安徽农业大学|安徽'
       # 命中任一条即跳过 RAG，仅走 MCP 查库。使用词/短语，避免单字误匹配（如「合工大」误命中「工」）。
       database-patterns:
         - '\b(list|show|describe|desc)\b[\s\S]{0,40}\btables?\b|\btables?\b[\s\S]{0,20}\b(list|show|all)\b'
@@ -74,6 +77,14 @@ app:
           display-name: 合肥大学
           aliases: [ 合肥大学, HFUU ]
           path-contains: [ '/hfuu/', 'hfuu/' ]
+        - key: aust
+          display-name: 安徽理工大学
+          aliases: [ 安理工, 安徽理工大学, AUST ]
+          path-contains: [ '/aust/', 'aust/' ]
+        - key: ahau
+          display-name: 安徽农业大学
+          aliases: [ 安农大, 安徽农业大学, AHAU ]
+          path-contains: [ '/ahau/', 'ahau/' ]
 
 logging:
   level:
@@ -99,6 +110,9 @@ mybatis:
     map-underscore-to-camel-case: true
 
 spring:
+  profiles:
+    default: local
+
   servlet:
     multipart:
       max-file-size: 2MB
@@ -119,6 +133,11 @@ spring:
     locations: classpath:db/migration
 
   ai:
+    model:
+      # Selected by profile-specific files (application-local.yml / application-online.yml)
+      chat: ${APP_AI_CHAT_MODEL_PROVIDER:ollama}
+      embedding: ${APP_AI_EMBEDDING_MODEL_PROVIDER:ollama}
+
     # MCP Client configuration
     mcp:
       client:
@@ -131,17 +150,6 @@ spring:
           servers-configuration: classpath:/mcp-servers-config.json
         toolcallback:
           enabled: true      # Auto register MCP as Spring AI Tool
-
-    dashscope:
-      # API Key: https://dashscope.console.aliyun.com/apiKey
-      api-key: ${DASHSCOPE_API_KEY}
-      chat:
-        options:
-          model: qwen-plus
-          temperature: 0.0
-      embedding:
-        options:
-          model: text-embedding-v4
 
 server:
   port: 8080

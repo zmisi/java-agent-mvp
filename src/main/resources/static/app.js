@@ -13,6 +13,8 @@ const state = {
   abortController: null,
   loadingTimer: null,
   loadingStartedAt: null,
+  lastContextUsage: null,
+  contextPanelOpen: false,
 };
 
 const LOADING_HINTS = [
@@ -93,6 +95,109 @@ async function api(path, options = {}) {
     return await res.json();
   }
   return null;
+}
+
+function categoryColor(category) {
+  const map = {
+    system_prompt: "#6366f1",
+    tools: "#a855f7",
+    memory_user: "#0ea5e9",
+    memory_assistant: "#22c55e",
+    memory_tool: "#eab308",
+    current_user: "#f97316",
+  };
+  return map[category] || "#94a3b8";
+}
+
+function clearContextUsage() {
+  state.lastContextUsage = null;
+  state.contextPanelOpen = false;
+  const btn = $("contextUsageBtn");
+  if (btn) {
+    btn.hidden = true;
+    btn.setAttribute("aria-expanded", "false");
+  }
+  const ring = $("contextUsageRing");
+  if (ring) {
+    ring.style.background = "";
+  }
+  const pct = $("contextUsagePct");
+  if (pct) {
+    pct.textContent = "—";
+  }
+  const panel = $("contextUsagePanel");
+  if (panel) {
+    panel.hidden = true;
+  }
+}
+
+function setContextUsage(u) {
+  if (!u || typeof u.usedPercent !== "number") {
+    clearContextUsage();
+    return;
+  }
+  state.lastContextUsage = u;
+  const btn = $("contextUsageBtn");
+  btn.hidden = false;
+  const pctVal = Math.min(100, Math.round(u.usedPercent * 10) / 10);
+  $("contextUsagePct").textContent = `${pctVal}%`;
+  const deg = Math.min(360, u.usedPercent * 3.6);
+  $("contextUsageRing").style.background =
+    `conic-gradient(#5f5f5f 0 ${deg}deg, #d9d9d9 ${deg}deg 360deg)`;
+
+  const sum = $("contextUsageSummary");
+  sum.textContent = `~${u.totalEstimatedInputTokens.toLocaleString()} / ${u.contextWindowTokens.toLocaleString()} input tokens (${pctVal}% of configured window) · ${u.estimationMethod}`;
+
+  const bar = $("contextUsageBar");
+  bar.innerHTML = "";
+  const rows = u.breakdown || [];
+  for (const r of rows) {
+    const seg = document.createElement("div");
+    seg.className = "context-usage-seg";
+    seg.title = `${r.label}: ~${r.estimatedTokens}`;
+    seg.style.background = categoryColor(r.category);
+    seg.style.flexGrow = Math.max(1, r.estimatedTokens || 0);
+    bar.appendChild(seg);
+  }
+
+  const tbody = $("contextUsageTbody");
+  tbody.innerHTML = "";
+  for (const r of rows) {
+    const tr = document.createElement("tr");
+    const c1 = document.createElement("td");
+    c1.innerHTML = `<span style="color:${categoryColor(r.category)}">●</span> ${escapeHtml(r.label)}`;
+    const c2 = document.createElement("td");
+    c2.textContent = r.estimatedTokens != null ? String(r.estimatedTokens) : "—";
+    const c3 = document.createElement("td");
+    c3.textContent = r.charCount != null ? String(r.charCount) : "—";
+    tr.appendChild(c1);
+    tr.appendChild(c2);
+    tr.appendChild(c3);
+    tbody.appendChild(tr);
+  }
+}
+
+function toggleContextUsagePanel() {
+  const panel = $("contextUsagePanel");
+  const btn = $("contextUsageBtn");
+  if (!panel || btn.hidden) {
+    return;
+  }
+  state.contextPanelOpen = !state.contextPanelOpen;
+  panel.hidden = !state.contextPanelOpen;
+  btn.setAttribute("aria-expanded", state.contextPanelOpen ? "true" : "false");
+}
+
+function closeContextUsagePanel() {
+  state.contextPanelOpen = false;
+  const panel = $("contextUsagePanel");
+  const btn = $("contextUsageBtn");
+  if (panel) {
+    panel.hidden = true;
+  }
+  if (btn) {
+    btn.setAttribute("aria-expanded", "false");
+  }
 }
 
 function escapeHtml(s) {
@@ -349,6 +454,10 @@ async function selectSession(id) {
     abortInFlight();
   }
   closeSessionMenu();
+  const previousActive = state.activeId;
+  if (previousActive !== id) {
+    clearContextUsage();
+  }
   state.activeId = id;
   const row = document.querySelector(`.sidebar-list-row[data-id="${id}"]`);
   const titleEl = row ? row.querySelector(".sidebar-list-text") : null;
@@ -427,6 +536,7 @@ async function deleteSession(id) {
   await api(`/api/conversations/${encodeURIComponent(id)}`, { method: "DELETE" });
   if (state.activeId === id) {
     state.activeId = null;
+    clearContextUsage();
     $("messages").innerHTML = "";
     const empty = document.createElement("div");
     empty.className = "messages-empty";
@@ -506,6 +616,11 @@ async function sendMessage() {
     removeLoadingBubble();
     await refreshSessions(conversationId);
     await selectSession(conversationId);
+    if (reply && reply.contextUsage) {
+      setContextUsage(reply.contextUsage);
+    } else {
+      clearContextUsage();
+    }
     if (reply && reply.sources && reply.sources.length > 0) {
       appendSourcesToLastAssistant(reply.sources);
     }
@@ -622,6 +737,7 @@ function wire() {
       if (!$("settingsPanel").hidden) {
         closeSettings();
       }
+      closeContextUsagePanel();
       if (typeof closeReleaseModal === "function" && !$("releaseModal").hidden) {
         closeReleaseModal();
       }
@@ -632,6 +748,26 @@ function wire() {
   });
 
   wireSettings();
+  const ctxBtn = $("contextUsageBtn");
+  if (ctxBtn) {
+    ctxBtn.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      toggleContextUsagePanel();
+    });
+  }
+  $("contextUsageClose")?.addEventListener("click", () => closeContextUsagePanel());
+  document.addEventListener("click", (ev) => {
+    const panel = $("contextUsagePanel");
+    const btn = $("contextUsageBtn");
+    if (!state.contextPanelOpen || !panel || panel.hidden) {
+      return;
+    }
+    if (ev.target.closest("#contextUsagePanel") || ev.target.closest("#contextUsageBtn")) {
+      return;
+    }
+    closeContextUsagePanel();
+  });
+
   if (typeof wireReleases === "function") {
     wireReleases();
   }
