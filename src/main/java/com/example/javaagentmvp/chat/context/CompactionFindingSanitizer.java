@@ -8,11 +8,13 @@ import java.util.regex.Pattern;
 final class CompactionFindingSanitizer {
 
     static final int MAX_LABEL_CHARS = 60;
+    static final int MAX_FINDINGS = 48;
     private static final Pattern MARKDOWN_OR_NOISE = Pattern.compile(
             "[`*#]|---|###|✅|❌|资料来源|rag-docs|```", Pattern.CASE_INSENSITIVE);
+    private static final Pattern RAW_COPY_PATTERN = Pattern.compile(
+            " - |： - |→|\\*\\*|建议获取路径|建议后续操作|根据您提供", Pattern.CASE_INSENSITIVE);
 
-    private CompactionFindingSanitizer() {
-    }
+    private CompactionFindingSanitizer() {}
 
     static List<String> sanitizeList(List<String> rawFindings) {
         LinkedHashSet<String> out = new LinkedHashSet<>();
@@ -23,7 +25,7 @@ final class CompactionFindingSanitizer {
                     out.add(label);
                 }
             }
-            if (out.size() >= 8) {
+            if (out.size() >= MAX_FINDINGS) {
                 break;
             }
         }
@@ -31,15 +33,10 @@ final class CompactionFindingSanitizer {
     }
 
     static String sanitize(String raw) {
-        if (raw == null) {
-            return "";
-        }
+        if (raw == null) return "";
         String text = CompactionMessageUtils.oneLine(raw)
-                .replace("**", "")
-                .replace("`", "")
-                .replace("✅", "")
-                .replace("❌", "")
-                .strip();
+                .replace("**", "").replace("`", "")
+                .replace("✅", "").replace("❌", "").strip();
         int period = findFirstSentenceEnd(text);
         if (period > 8 && period <= MAX_LABEL_CHARS) {
             text = text.substring(0, period).strip();
@@ -51,15 +48,10 @@ final class CompactionFindingSanitizer {
     }
 
     static boolean isAcceptable(String label) {
-        if (label == null || label.isBlank()) {
-            return false;
-        }
-        if (label.length() < 4 || label.length() > MAX_LABEL_CHARS + 1) {
-            return false;
-        }
-        if (MARKDOWN_OR_NOISE.matcher(label).find()) {
-            return false;
-        }
+        if (label == null || label.isBlank()) return false;
+        if (label.length() < 4 || label.length() > MAX_LABEL_CHARS + 1) return false;
+        if (MARKDOWN_OR_NOISE.matcher(label).find()) return false;
+        if (RAW_COPY_PATTERN.matcher(label).find()) return false;
         String n = label.strip();
         return !(n.length() < 8
                 || n.equals("好的，我来帮你查一下")
@@ -70,15 +62,11 @@ final class CompactionFindingSanitizer {
         List<String> parts = new ArrayList<>();
         for (String segment : raw.split("\\|")) {
             String piece = segment.strip();
-            if (piece.isEmpty()) {
-                continue;
-            }
+            if (piece.isEmpty()) continue;
             if (piece.contains("\n")) {
                 for (String line : piece.split("\\n")) {
                     String linePiece = line.strip().replaceFirst("^[-*]\\s*", "");
-                    if (!linePiece.isEmpty()) {
-                        parts.add(linePiece);
-                    }
+                    if (!linePiece.isEmpty()) parts.add(linePiece);
                 }
             } else {
                 parts.add(piece);
@@ -90,12 +78,8 @@ final class CompactionFindingSanitizer {
     private static int findFirstSentenceEnd(String text) {
         int cn = text.indexOf('。');
         int en = text.indexOf('.');
-        if (cn < 0) {
-            return en;
-        }
-        if (en < 0) {
-            return cn;
-        }
+        if (cn < 0) return en;
+        if (en < 0) return cn;
         return Math.min(cn, en);
     }
 }

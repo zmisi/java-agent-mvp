@@ -41,11 +41,20 @@ final class CompactionSummaryValidator {
         if (countUserMessages(history) > 1 && !hasEnoughUserGoals(normalized, history)) {
             return false;
         }
+        if (!hasFindingsInDynamicRange(normalized, history)) {
+            return false;
+        }
         return allFindingsAcceptable(normalized);
     }
 
     private static boolean allFindingsAcceptable(String summary) {
-        for (String finding : CompactionBriefParser.parse(summary).knownFindings()) {
+        List<String> findings = CompactionBriefParser.parse(summary).knownFindings();
+        int goalCount = CompactionBriefParser.parse(summary).userGoals().size();
+        int maxExpected = Math.max(1, (int) Math.ceil(goalCount * 1.5));
+        if (findings.size() > maxExpected) {
+            return false;
+        }
+        for (String finding : findings) {
             if (!CompactionFindingSanitizer.isAcceptable(CompactionFindingSanitizer.sanitize(finding))) {
                 return false;
             }
@@ -54,12 +63,25 @@ final class CompactionSummaryValidator {
     }
 
     private static boolean hasEnoughUserGoals(String summary, List<Message> history) {
-        int expected = Math.min(countUserMessages(history), 6);
+        int expected = countUserMessages(history);
         if (expected <= 1) {
             return true;
         }
         int actual = CompactionBriefParser.parse(summary).userGoals().size();
         return actual >= expected;
+    }
+
+    private static boolean hasFindingsInDynamicRange(String summary, List<Message> history) {
+        CompactionBriefParts parts = CompactionBriefParser.parse(summary);
+        int goals = parts.userGoals().size();
+        if (goals <= 0) {
+            return true;
+        }
+        int findings = parts.knownFindings().size();
+        int maxAllowed = Math.max(1, (int) Math.ceil(goals * 1.5));
+        int assistantTurns = Math.max(1, countAssistantOrToolMessages(history));
+        int minRequired = Math.min(goals, assistantTurns);
+        return findings >= minRequired && findings <= maxAllowed;
     }
 
     private static int countUserMessages(List<Message> history) {
@@ -84,5 +106,17 @@ final class CompactionSummaryValidator {
             }
         }
         return false;
+    }
+
+    private static int countAssistantOrToolMessages(List<Message> history) {
+        int count = 0;
+        for (Message message : history) {
+            MessageType type = message.getMessageType();
+            if ((type == MessageType.ASSISTANT || type == MessageType.TOOL)
+                    && !CompactionMessageUtils.safeText(message).strip().isEmpty()) {
+                count++;
+            }
+        }
+        return count;
     }
 }

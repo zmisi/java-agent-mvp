@@ -54,7 +54,9 @@ public class ModelSummaryGenerator {
                 .system(systemPrompt)
                 .user("""
                         Summarize the conversation transcript below into the required Compact brief.
-                        Known findings: at most 8 labels, each <= 60 characters, one line, separated by " | " only.
+                        User goals: include all distinct user turns (deduplicated), in order.
+                        Known findings: keep count between 1x and 1.5x of user-goal count; each <= 60 chars; one line, separated by " | " only.
+                        Keep findings concise labels, not copied paragraphs.
 
                         --- accumulated turn summaries ---
                         %s
