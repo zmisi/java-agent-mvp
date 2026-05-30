@@ -28,6 +28,15 @@ app:
     memory:
       # Sliding window of USER/ASSISTANT/TOOL messages per conversation (model context)
       max-messages: 30
+    compaction:
+      # model: one LLM call to build Compact brief; rules: deterministic fallback
+      summary-mode: model
+      fallback-to-rules-on-failure: true
+      prompt-location: classpath:prompts/compaction-system.md
+      transcript-message-limit: 16
+      turn-summary-limit: 24
+      max-chars-per-message: 6000
+      temperature: 0
     # Declared input budget for UI % (tune to your model; observability only)
     context-window:
       max-input-tokens: 131072

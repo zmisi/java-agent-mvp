@@ -4,6 +4,8 @@ import com.example.javaagentmvp.QwenApiLoggingAdvisor;
 import com.example.javaagentmvp.chat.AgentConversationRepository;
 import com.example.javaagentmvp.chat.context.ChatContextUsageRegistry;
 import com.example.javaagentmvp.chat.context.ContextUsageResponse;
+import com.example.javaagentmvp.chat.context.ConversationCompactionService;
+import com.example.javaagentmvp.chat.context.ConversationTurnSummaryBuffer;
 import com.example.javaagentmvp.rag.RagFlowContext;
 import com.example.javaagentmvp.rag.RagSource;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -33,6 +35,8 @@ public class ChatController {
     private final AgentConversationRepository conversationRepository;
 
     private final ChatContextUsageRegistry chatContextUsageRegistry;
+    private final ConversationCompactionService conversationCompactionService;
+    private final ConversationTurnSummaryBuffer turnSummaryBuffer;
 
     private final String activeProvider;
 
@@ -41,11 +45,15 @@ public class ChatController {
             QwenApiLoggingAdvisor qwenApiLoggingAdvisor,
             AgentConversationRepository conversationRepository,
             ChatContextUsageRegistry chatContextUsageRegistry,
+            ConversationCompactionService conversationCompactionService,
+            ConversationTurnSummaryBuffer turnSummaryBuffer,
             @Value("${app.llm.provider:local}") String activeProvider) {
         this.chatClient = chatClient;
         this.qwenApiLoggingAdvisor = qwenApiLoggingAdvisor;
         this.conversationRepository = conversationRepository;
         this.chatContextUsageRegistry = chatContextUsageRegistry;
+        this.conversationCompactionService = conversationCompactionService;
+        this.turnSummaryBuffer = turnSummaryBuffer;
         this.activeProvider = activeProvider.strip().toLowerCase();
     }
 
@@ -73,6 +81,7 @@ public class ChatController {
                     .content();
 
             ContextUsageResponse contextUsage = chatContextUsageRegistry.consume();
+            turnSummaryBuffer.appendTurn(conversationId, message, reply);
             touchConversation(conversationId, message);
             return new ChatReplyDto(reply, RagFlowContext.sources(), contextUsage);
         }
@@ -83,6 +92,53 @@ public class ChatController {
         finally {
             RagFlowContext.clear();
         }
+    }
+
+    @PostMapping("/{conversationId}/compact")
+    public CompactReplyDto compact(
+            @PathVariable String conversationId,
+            @RequestHeader(value = "X-LLM-Provider", required = false) String requestedProvider) {
+        return compactExecute(conversationId, requestedProvider);
+    }
+
+    @PostMapping("/{conversationId}/compact-preview")
+    public CompactReplyDto compactPreview(
+            @PathVariable String conversationId,
+            @RequestHeader(value = "X-LLM-Provider", required = false) String requestedProvider) {
+        return compactReview(conversationId, requestedProvider);
+    }
+
+    @PostMapping("/{conversationId}/compact-review")
+    public CompactReplyDto compactReview(
+            @PathVariable String conversationId,
+            @RequestHeader(value = "X-LLM-Provider", required = false) String requestedProvider) {
+        return compact(conversationId, requestedProvider, false);
+    }
+
+    @PostMapping("/{conversationId}/compact-execute")
+    public CompactReplyDto compactExecute(
+            @PathVariable String conversationId,
+            @RequestHeader(value = "X-LLM-Provider", required = false) String requestedProvider) {
+        return compact(conversationId, requestedProvider, true);
+    }
+
+    private CompactReplyDto compact(String conversationId, String requestedProvider, boolean persist) {
+        validateRequestedProvider(requestedProvider);
+        if (!conversationRepository.exists(conversationId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "conversation not found");
+        }
+        ConversationCompactionService.CompactionResult result = persist
+                ? conversationCompactionService.compact(conversationId)
+                : conversationCompactionService.preview(conversationId);
+        if (persist) {
+            conversationRepository.touchUpdatedAt(conversationId, Instant.now());
+        }
+        return new CompactReplyDto(
+                result.summary(),
+                result.beforeMessageCount(),
+                result.afterMessageCount(),
+                result.beforeEstimatedTokens(),
+                result.afterEstimatedTokens());
     }
 
     private void touchConversation(String conversationId, String message) {
@@ -119,5 +175,14 @@ public class ChatController {
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record ChatReplyDto(String assistant, List<RagSource> sources, ContextUsageResponse contextUsage) {
+    }
+
+    public record CompactReplyDto(
+            String summary,
+            int beforeMessageCount,
+            int afterMessageCount,
+            int beforeEstimatedTokens,
+            int afterEstimatedTokens
+    ) {
     }
 }

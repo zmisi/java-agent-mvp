@@ -957,12 +957,9 @@ body {
   display: flex;
   justify-content: flex-end;
   align-items: center;
+  gap: 8px;
   padding: 6px 6px 0;
   min-height: 0;
-}
-
-.composer-meta:not(:has(.context-usage-btn:not([hidden]))) {
-  display: none;
 }
 
 .context-usage-btn {
@@ -986,6 +983,92 @@ body {
 
 .context-usage-btn[hidden] {
   display: none;
+}
+
+.compact-action-btn {
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  line-height: 1;
+  padding: 5px 8px;
+  cursor: pointer;
+}
+
+.compact-action-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.compact-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.compact-action-btn-primary {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.compaction-result-panel {
+  margin: 8px 6px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-size: var(--font-size-sm);
+}
+
+.compaction-result-panel[hidden] {
+  display: none;
+}
+
+.compaction-result-title {
+  font-weight: 600;
+}
+
+.compaction-result-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.compaction-result-clear {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  line-height: 1;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.compaction-result-clear:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.compaction-result-stats {
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.compaction-result-body {
+  margin: 0;
+  padding: 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--code-bg);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
 }
 
 .context-usage-ring {

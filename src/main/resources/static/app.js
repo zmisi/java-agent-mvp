@@ -248,6 +248,7 @@ function setComposerState(hasSession) {
   $("input").placeholder = hasSession
     ? "Ask about the database or docs… (⌘+Enter to send)"
     : "Select a chat on the left, or click New Chat";
+  setCompactionButtonsState(hasSession, false);
 }
 
 function setComposerBusy(busy) {
@@ -262,6 +263,28 @@ function setComposerBusy(busy) {
     inner?.classList.remove("is-busy");
     setComposerState(!!state.activeId);
   }
+  setCompactionButtonsState(!!state.activeId, busy);
+}
+
+function setCompactionButtonsState(hasSession, busy) {
+  const reviewBtn = $("compactReviewBtn");
+  const executeBtn = $("compactExecuteBtn");
+  if (!reviewBtn || !executeBtn) {
+    return;
+  }
+  reviewBtn.hidden = !hasSession;
+  executeBtn.hidden = !hasSession;
+  reviewBtn.disabled = !hasSession || busy;
+  executeBtn.disabled = !hasSession || busy;
+}
+
+function clearCompactionResultPanel() {
+  const panel = $("compactionResultPanel");
+  if (!panel) {
+    return;
+  }
+  panel.hidden = true;
+  panel.innerHTML = "";
 }
 
 function clearMessagesEmpty() {
@@ -275,6 +298,88 @@ function appendUserBubble(text) {
   div.innerHTML = `<div class="body">${escapeHtml(text)}</div>`;
   $("messages").appendChild(div);
   scrollMessagesToBottom();
+}
+
+function renderCompactionResultPanel(mode, result) {
+  const panel = $("compactionResultPanel");
+  if (!panel) {
+    return;
+  }
+  const title = mode === "execute" ? "Compaction executed" : "Compaction review";
+  const summary = (result && result.summary)
+    ? formatCompactionSummaryForDisplay(result.summary)
+    : "(no summary available)";
+  const stats = result
+    ? `Messages ${result.beforeMessageCount} → ${result.afterMessageCount} · Tokens ${result.beforeEstimatedTokens} → ${result.afterEstimatedTokens}`
+    : "No compaction metrics returned";
+  panel.innerHTML = `
+    <div class="compaction-result-head">
+      <div class="compaction-result-title">${title}</div>
+      <button type="button" class="compaction-result-clear" id="compactionResultClearBtn">Clear</button>
+    </div>
+    <div class="compaction-result-stats">${escapeHtml(stats)}</div>
+    <pre class="compaction-result-body">${escapeHtml(summary)}</pre>
+  `;
+  panel.hidden = false;
+  $("compactionResultClearBtn")?.addEventListener("click", () => {
+    clearCompactionResultPanel();
+  });
+}
+
+function formatCompactionSummaryForDisplay(rawSummary) {
+  const raw = String(rawSummary || "").replace(/\r\n/g, "\n").trim();
+  if (!raw || raw === "(no summary available)") {
+    return "(no summary available)";
+  }
+
+  const compactBrief = extractCompactionField(raw, "Compact brief");
+  const userGoalsRaw = extractCompactionField(raw, "User goals");
+  const knownFindingsRaw = extractCompactionField(raw, "Known findings");
+  const nextStepRaw = extractCompactionField(raw, "Next step");
+
+  if (!compactBrief && !userGoalsRaw && !knownFindingsRaw && !nextStepRaw) {
+    return raw;
+  }
+
+  const userGoals = splitCompactionItems(userGoalsRaw);
+  const knownFindings = splitCompactionItems(knownFindingsRaw);
+  const lines = ["Compact brief:"];
+  lines.push("User goals:");
+  if (userGoals.length === 0) {
+    lines.push("1. (none)");
+  } else {
+    userGoals.forEach((item, idx) => lines.push(`${idx + 1}. ${item}`));
+  }
+  lines.push("");
+  lines.push("Known findings:");
+  if (knownFindings.length === 0) {
+    lines.push("1. (none)");
+  } else {
+    knownFindings.forEach((item, idx) => lines.push(`${idx + 1}. ${item}`));
+  }
+  lines.push("");
+  lines.push(`Next step: ${nextStepRaw || "(none)"}`);
+  return lines.join("\n");
+}
+
+function extractCompactionField(text, field) {
+  const escaped = field.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`(?:^|\\n)-\\s*${escaped}:\\s*([\\s\\S]*?)(?=\\n-\\s*[A-Za-z ]+:|$)`, "i");
+  const match = text.match(pattern);
+  if (!match) {
+    return "";
+  }
+  return match[1].replace(/\n+/g, " ").replace(/\s{2,}/g, " ").trim();
+}
+
+function splitCompactionItems(fieldValue) {
+  if (!fieldValue) {
+    return [];
+  }
+  return fieldValue
+    .split("|")
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 function scrollMessagesToBottom() {
@@ -459,6 +564,8 @@ async function selectSession(id) {
     clearContextUsage();
   }
   state.activeId = id;
+  setCompactionButtonsState(true, state.inFlight);
+  clearCompactionResultPanel();
   const row = document.querySelector(`.sidebar-list-row[data-id="${id}"]`);
   const titleEl = row ? row.querySelector(".sidebar-list-text") : null;
   const title = titleEl ? titleEl.textContent : id;
@@ -536,6 +643,8 @@ async function deleteSession(id) {
   await api(`/api/conversations/${encodeURIComponent(id)}`, { method: "DELETE" });
   if (state.activeId === id) {
     state.activeId = null;
+    setCompactionButtonsState(false, state.inFlight);
+    clearCompactionResultPanel();
     clearContextUsage();
     $("messages").innerHTML = "";
     const empty = document.createElement("div");
@@ -640,6 +749,42 @@ async function sendMessage() {
   }
 }
 
+async function runCompaction(mode) {
+  if (state.inFlight) {
+    return;
+  }
+  if (!state.activeId) {
+    showToast("Select or create a chat first");
+    return;
+  }
+  const conversationId = state.activeId;
+  const endpoint = mode === "execute" ? "compact-execute" : "compact-review";
+  state.inFlight = true;
+  setComposerBusy(true);
+  showLoadingBubble();
+  try {
+    const result = await api(`/api/conversations/${encodeURIComponent(conversationId)}/${endpoint}`, {
+      method: "POST",
+    });
+    removeLoadingBubble();
+    renderCompactionResultPanel(mode, result);
+    if (mode === "execute") {
+      await refreshSessions(conversationId);
+      await selectSession(conversationId);
+      renderCompactionResultPanel(mode, result);
+      showToast("Compaction executed");
+    } else {
+      showToast("Compaction review ready");
+    }
+  } catch (e) {
+    removeLoadingBubble();
+    showToast(String(e && e.message ? e.message : e));
+  } finally {
+    state.inFlight = false;
+    setComposerBusy(false);
+  }
+}
+
 function autoResizeInput() {
   const ta = $("input");
   ta.style.height = "auto";
@@ -700,6 +845,8 @@ function wire() {
 
   $("send").addEventListener("click", sendMessage);
   $("stop").addEventListener("click", stopMessage);
+  $("compactReviewBtn")?.addEventListener("click", () => runCompaction("review"));
+  $("compactExecuteBtn")?.addEventListener("click", () => runCompaction("execute"));
 
   const input = $("input");
   input.addEventListener("input", () => {

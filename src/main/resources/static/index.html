@@ -108,11 +108,18 @@
             </button>
           </div>
           <div class="composer-meta">
+            <button type="button" id="compactReviewBtn" class="compact-action-btn" hidden title="Preview compaction result without applying">
+              Compact Review
+            </button>
+            <button type="button" id="compactExecuteBtn" class="compact-action-btn compact-action-btn-primary" hidden title="Apply compaction and replace stored history">
+              Compact Execute
+            </button>
             <button type="button" id="contextUsageBtn" class="context-usage-btn" hidden aria-expanded="false" aria-controls="contextUsagePanel" title="Estimated input context (last message sent)">
               <span class="context-usage-ring" id="contextUsageRing" aria-hidden="true"></span>
               <span id="contextUsagePct" class="context-usage-pct">—</span>
             </button>
           </div>
+          <div id="compactionResultPanel" class="compaction-result-panel" hidden></div>
         </div>
       </footer>
     </main>

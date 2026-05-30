@@ -1,5 +1,6 @@
 package com.example.javaagentmvp.dbagent;
 
+import com.example.javaagentmvp.ModelCallLoggingAdvisor;
 import io.modelcontextprotocol.client.McpSyncClient;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
@@ -23,6 +24,8 @@ public class DbAgentConfiguration {
 
     @Bean
     ChatClient draftSqlChatClient(ChatClient.Builder chatClientBuilder) {
-        return chatClientBuilder.build();
+        return chatClientBuilder
+                .defaultAdvisors(new ModelCallLoggingAdvisor("DRAFT-SQL"))
+                .build();
     }
 }
