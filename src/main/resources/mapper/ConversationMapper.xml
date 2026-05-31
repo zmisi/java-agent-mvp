@@ -18,6 +18,7 @@
         SELECT COUNT(*)::int
         FROM agent_ui.conversation
         WHERE id = #{id}
+          AND archived_at IS NULL
     </select>
 
     <update id="touchUpdatedAt">
@@ -39,6 +40,15 @@
         SET title = #{title},
             updated_at = #{updatedAt}
         WHERE id = #{id}
+          AND archived_at IS NULL
+    </update>
+
+    <update id="archiveById">
+        UPDATE agent_ui.conversation
+        SET archived_at = #{archivedAt},
+            updated_at = #{archivedAt}
+        WHERE id = #{id}
+          AND archived_at IS NULL
     </update>
 
     <delete id="deleteById">
@@ -53,6 +63,7 @@
                created_at::text AS created_at,
                updated_at::text AS updated_at
         FROM agent_ui.conversation
+        WHERE archived_at IS NULL
         ORDER BY updated_at DESC
         LIMIT 200
     </select>
@@ -61,6 +72,7 @@
         SELECT title
         FROM agent_ui.conversation
         WHERE id = #{id}
+          AND archived_at IS NULL
     </select>
 
 </mapper>

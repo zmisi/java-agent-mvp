@@ -1,13 +1,9 @@
 package com.example.javaagentmvp.chat.context;
 
+import com.example.javaagentmvp.chat.persistence.mapper.ConversationTurnSummaryMapper;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.Deque;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -18,29 +14,37 @@ public class ConversationTurnSummaryBuffer {
     private static final int GOAL_MAX_CHARS = 100;
     private static final int FINDING_MAX_CHARS = 100;
 
-    private final Map<String, Deque<String>> byConversation = new ConcurrentHashMap<>();
+    private final ConversationTurnSummaryMapper mapper;
+
+    public ConversationTurnSummaryBuffer(ConversationTurnSummaryMapper mapper) {
+        this.mapper = mapper;
+    }
 
     public void appendTurn(String conversationId, String userMessage, String assistantReply) {
-        if (conversationId == null || conversationId.isBlank()) return;
+        if (conversationId == null || conversationId.isBlank()) {
+            return;
+        }
         String goal = trimOneLine(userMessage, GOAL_MAX_CHARS);
         String finding = extractSeveralSentences(assistantReply, 3, FINDING_MAX_CHARS);
-        if (goal.isBlank() && finding.isBlank()) return;
-        String row = "goal=" + goal + " ; finding=" + finding;
-        Deque<String> deque = byConversation.computeIfAbsent(conversationId, k -> new ArrayDeque<>());
-        synchronized (deque) {
-            deque.addLast(row);
-            while (deque.size() > MAX_PER_CONVERSATION) deque.removeFirst();
+        if (goal.isBlank() && finding.isBlank()) {
+            return;
         }
+        if (goal.isBlank()) {
+            goal = "(none)";
+        }
+        if (finding.isBlank()) {
+            finding = "(none)";
+        }
+        String row = "goal=" + goal + " ; finding=" + finding;
+        mapper.insertNextTurnSummary(conversationId, goal, finding, row);
     }
 
     public List<String> recent(String conversationId, int limit) {
-        if (conversationId == null || conversationId.isBlank() || limit <= 0) return List.of();
-        Deque<String> deque = byConversation.get(conversationId);
-        if (deque == null || deque.isEmpty()) return List.of();
-        List<String> all;
-        synchronized (deque) { all = new ArrayList<>(deque); }
-        int start = Math.max(0, all.size() - limit);
-        return all.subList(start, all.size());
+        if (conversationId == null || conversationId.isBlank() || limit <= 0) {
+            return List.of();
+        }
+        int safeLimit = Math.min(limit, MAX_PER_CONVERSATION);
+        return mapper.selectRecentSummaryRows(conversationId, safeLimit);
     }
 
     private static String extractSeveralSentences(String text, int maxSentences, int maxChars) {

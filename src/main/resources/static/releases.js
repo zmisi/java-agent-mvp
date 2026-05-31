@@ -1,10 +1,11 @@
-/* global $, api, escapeHtml, showToast, state, abortInFlight, refreshSessions, setComposerState */
+/* global $, api, escapeHtml, showToast, state, abortInFlight, refreshSessions, setComposerState, selectVisibleSidebarItems, appendSidebarMoreToggle */
 
 const releaseState = {
   activeReleaseId: null,
   view: "chat",
   busy: false,
   uploadedDesignDocPath: null,
+  releaseSidebarExpanded: false,
 };
 
 function statusLabel(status) {
@@ -195,7 +196,16 @@ async function refreshReleaseSidebar(releases, selectId) {
   if (!list) {
     return;
   }
-  list.innerHTML = renderReleaseSidebarItems(releases, selectId);
+  const visibleReleases =
+    typeof selectVisibleSidebarItems === "function"
+      ? selectVisibleSidebarItems(
+          releases,
+          releaseState.releaseSidebarExpanded,
+          selectId,
+          (release) => release.id,
+        )
+      : releases;
+  list.innerHTML = renderReleaseSidebarItems(visibleReleases, selectId);
   list.querySelectorAll(".sidebar-list-item[data-release-id]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       if (state.inFlight) {
@@ -207,6 +217,17 @@ async function refreshReleaseSidebar(releases, selectId) {
       updateSidebarActiveStates();
     });
   });
+  appendSidebarMoreToggle(
+    list,
+    releaseState.releaseSidebarExpanded,
+    releases.length,
+    visibleReleases.length,
+    async () => {
+      releaseState.releaseSidebarExpanded = !releaseState.releaseSidebarExpanded;
+      await refreshReleaseSidebar(releases, selectId);
+      updateSidebarActiveStates();
+    },
+  );
 }
 
 async function refreshReleaseDetailPanel(releaseId) {

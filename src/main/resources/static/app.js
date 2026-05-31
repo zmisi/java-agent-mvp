@@ -5,6 +5,8 @@ function $(id) {
 }
 
 const SETTINGS_KEY = "db-agent-ui-settings";
+const CONTEXT_USAGE_CACHE_KEY = "db-agent-context-usage-cache";
+const SIDEBAR_RECENT_LIMIT = 6;
 
 const state = {
   activeId: null,
@@ -14,7 +16,9 @@ const state = {
   loadingTimer: null,
   loadingStartedAt: null,
   lastContextUsage: null,
+  contextUsageBySessionId: {},
   contextPanelOpen: false,
+  chatSidebarExpanded: false,
 };
 
 const LOADING_HINTS = [
@@ -28,6 +32,30 @@ const defaultSettings = () => ({
   theme: "system",
   fontSize: 14,
 });
+
+function loadContextUsageCache() {
+  try {
+    const raw = localStorage.getItem(CONTEXT_USAGE_CACHE_KEY);
+    if (!raw) {
+      return {};
+    }
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {};
+    }
+    return parsed;
+  } catch {
+    return {};
+  }
+}
+
+function saveContextUsageCache(cache) {
+  try {
+    localStorage.setItem(CONTEXT_USAGE_CACHE_KEY, JSON.stringify(cache || {}));
+  } catch {
+    // ignore storage failures (private mode / quota)
+  }
+}
 
 function loadSettings() {
   try {
@@ -114,16 +142,17 @@ function clearContextUsage() {
   state.contextPanelOpen = false;
   const btn = $("contextUsageBtn");
   if (btn) {
-    btn.hidden = true;
+    btn.hidden = false;
     btn.setAttribute("aria-expanded", "false");
+    btn.title = "Estimated input context (send a message to populate)";
   }
   const ring = $("contextUsageRing");
   if (ring) {
-    ring.style.background = "";
+    ring.style.background = "conic-gradient(var(--border-subtle) 0 360deg)";
   }
   const pct = $("contextUsagePct");
   if (pct) {
-    pct.textContent = "—";
+    pct.textContent = "--";
   }
   const panel = $("contextUsagePanel");
   if (panel) {
@@ -139,6 +168,7 @@ function setContextUsage(u) {
   state.lastContextUsage = u;
   const btn = $("contextUsageBtn");
   btn.hidden = false;
+  btn.title = "Estimated input context (last message sent)";
   const pctVal = Math.min(100, Math.round(u.usedPercent * 10) / 10);
   $("contextUsagePct").textContent = `${pctVal}%`;
   const deg = Math.min(360, u.usedPercent * 3.6);
@@ -180,7 +210,7 @@ function setContextUsage(u) {
 function toggleContextUsagePanel() {
   const panel = $("contextUsagePanel");
   const btn = $("contextUsageBtn");
-  if (!panel || btn.hidden) {
+  if (!panel || btn.hidden || !state.lastContextUsage) {
     return;
   }
   state.contextPanelOpen = !state.contextPanelOpen;
@@ -240,6 +270,7 @@ function setComposerState(hasSession) {
     return;
   }
   const hasText = $("input").value.trim().length > 0;
+  const isEmptySession = hasSession && isCurrentSessionEmpty();
   $("send").hidden = false;
   $("stop").hidden = true;
   $("send").disabled = !hasSession || !hasText;
@@ -248,7 +279,35 @@ function setComposerState(hasSession) {
   $("input").placeholder = hasSession
     ? "Ask about the database or docs… (⌘+Enter to send)"
     : "Select a chat on the left, or click New Chat";
-  setCompactionButtonsState(hasSession, false);
+  setCompactionButtonsState(hasSession && !isEmptySession, false);
+  if (!hasSession) {
+    setSessionEmptyState(false);
+  } else {
+    const box = $("messages");
+    setComposerCentered(box?.dataset?.sessionEmpty === "true");
+  }
+}
+
+function setComposerCentered(centered) {
+  const chatView = $("chatView");
+  if (!chatView) {
+    return;
+  }
+  chatView.classList.toggle("composer-centered", !!centered);
+}
+
+function isCurrentSessionEmpty() {
+  return $("messages")?.dataset?.sessionEmpty === "true";
+}
+
+function setSessionEmptyState(isEmpty) {
+  const box = $("messages");
+  if (!box) {
+    return;
+  }
+  box.dataset.sessionEmpty = isEmpty ? "true" : "false";
+  setComposerCentered(isEmpty);
+  setCompactionButtonsState(!!state.activeId && !isEmpty, state.inFlight);
 }
 
 function setComposerBusy(busy) {
@@ -263,7 +322,7 @@ function setComposerBusy(busy) {
     inner?.classList.remove("is-busy");
     setComposerState(!!state.activeId);
   }
-  setCompactionButtonsState(!!state.activeId, busy);
+  setCompactionButtonsState(!!state.activeId && !isCurrentSessionEmpty(), busy);
 }
 
 function setCompactionButtonsState(hasSession, busy) {
@@ -480,6 +539,7 @@ function openSessionMenu(sessionId, anchorEl) {
   const menu = $("sessionMenu");
   menu.innerHTML = `
     <button type="button" class="dropdown-item" data-action="rename">Rename</button>
+    <button type="button" class="dropdown-item" data-action="archive">Archive chat</button>
     <div class="dropdown-divider" role="separator"></div>
     <button type="button" class="dropdown-item danger" data-action="delete">Delete chat</button>
   `;
@@ -495,11 +555,50 @@ function openSessionMenu(sessionId, anchorEl) {
     await renameSession(sessionId);
   });
 
+  menu.querySelector('[data-action="archive"]').addEventListener("click", async (ev) => {
+    ev.stopPropagation();
+    closeSessionMenu();
+    await archiveSession(sessionId);
+  });
+
   menu.querySelector('[data-action="delete"]').addEventListener("click", async (ev) => {
     ev.stopPropagation();
     closeSessionMenu();
     await deleteSession(sessionId);
   });
+}
+
+function selectVisibleSidebarItems(items, expanded, activeId, getId) {
+  if (!Array.isArray(items) || items.length <= SIDEBAR_RECENT_LIMIT || expanded) {
+    return items || [];
+  }
+  const visible = items.slice(0, SIDEBAR_RECENT_LIMIT);
+  if (!activeId) {
+    return visible;
+  }
+  const activeIndex = items.findIndex((item) => getId(item) === activeId);
+  if (activeIndex < 0 || activeIndex < SIDEBAR_RECENT_LIMIT) {
+    return visible;
+  }
+  return [...items.slice(0, SIDEBAR_RECENT_LIMIT - 1), items[activeIndex]];
+}
+
+function appendSidebarMoreToggle(list, expanded, totalCount, visibleCount, onToggle) {
+  if (!list || totalCount <= SIDEBAR_RECENT_LIMIT) {
+    return;
+  }
+  const moreWrap = document.createElement("div");
+  moreWrap.className = "sidebar-list-more";
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "sidebar-list-more-btn";
+  const hiddenCount = Math.max(0, totalCount - visibleCount);
+  btn.textContent = expanded
+    ? "See less"
+    : `See more${hiddenCount > 0 ? ` (${hiddenCount})` : ""}`;
+  btn.addEventListener("click", onToggle);
+  moreWrap.appendChild(btn);
+  list.appendChild(moreWrap);
 }
 
 async function refreshSessions(selectId) {
@@ -517,7 +616,13 @@ async function refreshSessions(selectId) {
 
   const chatViewActive = typeof releaseState === "undefined" || releaseState.view === "chat";
   const activeId = selectId ?? state.activeId;
-  for (const s of sessions) {
+  const visibleSessions = selectVisibleSidebarItems(
+    sessions,
+    state.chatSidebarExpanded,
+    activeId,
+    (session) => session.id,
+  );
+  for (const s of visibleSessions) {
     const row = document.createElement("div");
     const isActive = chatViewActive && s.id === activeId;
     row.className = "sidebar-list-row" + (isActive ? " active" : "");
@@ -549,6 +654,17 @@ async function refreshSessions(selectId) {
     row.appendChild(menuBtn);
     list.appendChild(row);
   }
+
+  appendSidebarMoreToggle(
+    list,
+    state.chatSidebarExpanded,
+    sessions.length,
+    visibleSessions.length,
+    async () => {
+      state.chatSidebarExpanded = !state.chatSidebarExpanded;
+      await refreshSessions(state.activeId);
+    },
+  );
 }
 
 async function selectSession(id) {
@@ -560,10 +676,15 @@ async function selectSession(id) {
   }
   closeSessionMenu();
   const previousActive = state.activeId;
-  if (previousActive !== id) {
-    clearContextUsage();
-  }
   state.activeId = id;
+  if (previousActive !== id) {
+    const cachedUsage = state.contextUsageBySessionId[id];
+    if (cachedUsage) {
+      setContextUsage(cachedUsage);
+    } else {
+      clearContextUsage();
+    }
+  }
   setCompactionButtonsState(true, state.inFlight);
   clearCompactionResultPanel();
   const row = document.querySelector(`.sidebar-list-row[data-id="${id}"]`);
@@ -585,12 +706,15 @@ async function selectSession(id) {
   box.innerHTML = "";
 
   if (msgs.length === 0) {
+    setSessionEmptyState(true);
     const empty = document.createElement("div");
     empty.className = "messages-empty";
     empty.textContent = "Ask about the database or docs, e.g. RAG 和微调有什么区别？";
     box.appendChild(empty);
     return;
   }
+
+  setSessionEmptyState(false);
 
   for (const m of msgs) {
     const div = document.createElement("div");
@@ -641,8 +765,11 @@ async function deleteSession(id) {
     return;
   }
   await api(`/api/conversations/${encodeURIComponent(id)}`, { method: "DELETE" });
+  delete state.contextUsageBySessionId[id];
+  saveContextUsageCache(state.contextUsageBySessionId);
   if (state.activeId === id) {
     state.activeId = null;
+    setComposerCentered(false);
     setCompactionButtonsState(false, state.inFlight);
     clearCompactionResultPanel();
     clearContextUsage();
@@ -657,6 +784,28 @@ async function deleteSession(id) {
   await refreshSessions(state.activeId);
 }
 
+async function archiveSession(id) {
+  await api(`/api/conversations/${encodeURIComponent(id)}/archive`, { method: "POST" });
+  delete state.contextUsageBySessionId[id];
+  saveContextUsageCache(state.contextUsageBySessionId);
+  if (state.activeId === id) {
+    state.activeId = null;
+    setComposerCentered(false);
+    setCompactionButtonsState(false, state.inFlight);
+    clearCompactionResultPanel();
+    clearContextUsage();
+    $("messages").innerHTML = "";
+    const empty = document.createElement("div");
+    empty.className = "messages-empty";
+    empty.textContent = "Select or create a chat";
+    $("messages").appendChild(empty);
+    $("sessionTitle").textContent = "Select or create a chat";
+    setComposerState(false);
+  }
+  await refreshSessions(state.activeId);
+  showToast("Chat archived");
+}
+
 function stopMessage() {
   if (!state.inFlight) {
     return;
@@ -664,19 +813,45 @@ function stopMessage() {
   abortInFlight();
 }
 
+function resolveRagSourceHref(rawSource) {
+  if (!rawSource || !String(rawSource).trim()) {
+    return "";
+  }
+  const source = String(rawSource).trim();
+  if (/^https?:\/\//i.test(source)) {
+    return source;
+  }
+  const normalized = source.replaceAll("\\", "/").toLowerCase();
+  if (normalized.includes("rag-docs/")) {
+    return `/api/rag-docs/open?source=${encodeURIComponent(source)}`;
+  }
+  return "";
+}
+
 function formatRagSources(sources) {
   if (!sources || sources.length === 0) {
     return "";
   }
+  const sourceCount = sources.length;
   const items = sources
     .map((source) => {
       const school = source.school ? `<span class="rag-source-school">${escapeHtml(source.school)}</span>` : "";
       const title = source.title || source.source || "unknown";
+      const sourceRef = source.source || "";
+      const href = resolveRagSourceHref(sourceRef);
       const snippet = source.snippet || "";
-      return `<li>${school}<strong>${escapeHtml(title)}</strong><span>${escapeHtml(snippet)}</span></li>`;
+      const titleHtml = href
+        ? `<a class="rag-source-link rag-source-title-link" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(title)}</a>`
+        : `<strong>${escapeHtml(title)}</strong>`;
+      const sourceRefHtml = sourceRef
+        ? (href
+          ? `<a class="rag-source-link rag-source-ref-link" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(sourceRef)}</a>`
+          : `<span class="rag-source-ref-text">${escapeHtml(sourceRef)}</span>`)
+        : "";
+      return `<li>${school}${titleHtml}${sourceRefHtml}<span>${escapeHtml(snippet)}</span></li>`;
     })
     .join("");
-  return `<div class="rag-sources"><div class="rag-sources-title">Sources</div><ol>${items}</ol></div>`;
+  return `<div class="rag-sources"><details class="rag-sources-details"><summary class="rag-sources-summary">Sources <span class="rag-sources-count">${sourceCount}</span></summary><ol>${items}</ol></details></div>`;
 }
 
 function appendSourcesToLastAssistant(sources) {
@@ -706,6 +881,7 @@ async function sendMessage() {
     return;
   }
 
+  setSessionEmptyState(false);
   const conversationId = state.activeId;
   appendUserBubble(text);
   $("input").value = "";
@@ -726,9 +902,9 @@ async function sendMessage() {
     await refreshSessions(conversationId);
     await selectSession(conversationId);
     if (reply && reply.contextUsage) {
+      state.contextUsageBySessionId[conversationId] = reply.contextUsage;
+      saveContextUsageCache(state.contextUsageBySessionId);
       setContextUsage(reply.contextUsage);
-    } else {
-      clearContextUsage();
     }
     if (reply && reply.sources && reply.sources.length > 0) {
       appendSourcesToLastAssistant(reply.sources);
@@ -923,15 +1099,19 @@ function wire() {
 window.addEventListener("DOMContentLoaded", async () => {
   document.documentElement.dataset.theme = loadSettings().theme;
   applySettings(loadSettings());
+  state.contextUsageBySessionId = loadContextUsageCache();
   wire();
+  clearContextUsage();
   setComposerState(false);
   autoResizeInput();
 
   const box = $("messages");
+  box.dataset.sessionEmpty = "false";
   const empty = document.createElement("div");
   empty.className = "messages-empty";
   empty.textContent = "Select or create a chat";
   box.appendChild(empty);
+  setSessionEmptyState(false);
 
   try {
     await refreshSessions(null);

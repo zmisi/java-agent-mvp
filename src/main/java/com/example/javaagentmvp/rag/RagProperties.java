@@ -8,13 +8,18 @@ import java.util.List;
 @ConfigurationProperties(prefix = "app.rag")
 public record RagProperties(
         boolean enabled,
+        @DefaultValue("false") boolean rebuildOnStartup,
+        @DefaultValue("false") boolean clearBeforeRebuild,
+        @DefaultValue("agent_ui") String vectorSchemaName,
+        @DefaultValue("rag_vector_store") String vectorTableName,
         String documentLocationPattern,
         int topK,
         double maxDistance,
         boolean routeDatabaseQueries,
         String contextAddon,
         Routing routing,
-        Admissions admissions) {
+        Admissions admissions,
+        Hybrid hybrid) {
 
     public RagProperties {
         if (routing == null) {
@@ -28,6 +33,9 @@ public record RagProperties(
                     12,
                     List.of(),
                     defaultAnswerFormatTemplate());
+        }
+        if (hybrid == null) {
+            hybrid = new Hybrid(true, 2, 3, 3, 60, 1.0, 0.9, "auto", "simple");
         }
     }
 
@@ -59,6 +67,40 @@ public record RagProperties(
             if (answerFormatTemplate == null || answerFormatTemplate.isBlank()) {
                 answerFormatTemplate = defaultAnswerFormatTemplate();
             }
+        }
+    }
+
+    public record Hybrid(
+            @DefaultValue("true") boolean enabled,
+            @DefaultValue("2") int vectorTopKMultiplier,
+            @DefaultValue("3") int lexicalTopKMultiplier,
+            @DefaultValue("3") int fusionTopKMultiplier,
+            @DefaultValue("60") int rrfK,
+            @DefaultValue("1.0") double vectorWeight,
+            @DefaultValue("0.9") double lexicalWeight,
+            @DefaultValue("auto") String lexicalEngine,
+            @DefaultValue("simple") String ftsDictionary) {
+
+        public Hybrid {
+            if (vectorTopKMultiplier < 1) {
+                vectorTopKMultiplier = 1;
+            }
+            if (lexicalTopKMultiplier < 1) {
+                lexicalTopKMultiplier = 1;
+            }
+            if (fusionTopKMultiplier < 1) {
+                fusionTopKMultiplier = 1;
+            }
+            if (rrfK < 1) {
+                rrfK = 1;
+            }
+            if (ftsDictionary == null || ftsDictionary.isBlank()) {
+                ftsDictionary = "simple";
+            }
+            if (lexicalEngine == null || lexicalEngine.isBlank()) {
+                lexicalEngine = "auto";
+            }
+            lexicalEngine = lexicalEngine.strip().toLowerCase();
         }
     }
 

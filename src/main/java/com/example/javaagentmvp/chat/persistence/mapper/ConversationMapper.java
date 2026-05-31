@@ -29,6 +29,8 @@ public interface ConversationMapper {
             @Param("title") String title,
             @Param("updatedAt") Instant updatedAt);
 
+    int archiveById(@Param("id") String id, @Param("archivedAt") Instant archivedAt);
+
     int deleteById(@Param("id") String id);
 
     List<ConversationSummaryRow> listSummaries();

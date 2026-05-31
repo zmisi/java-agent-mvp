@@ -24,12 +24,28 @@ app:
         schema: emp_test
 
 spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.ai.model.ollama.autoconfigure.OllamaChatAutoConfiguration
+      - org.springframework.ai.model.ollama.autoconfigure.OllamaEmbeddingAutoConfiguration
   datasource:
     url: jdbc:postgresql://postgres:5432/employees
     username: agent
     password: agent
 
   ai:
+    model:
+      chat: dashscope
+      embedding: dashscope
+    dashscope:
+      api-key: ${DASHSCOPE_API_KEY}
+      chat:
+        options:
+          model: ${DASHSCOPE_CHAT_MODEL:qwen-plus}
+          temperature: 0.0
+      embedding:
+        options:
+          model: ${DASHSCOPE_EMBEDDING_MODEL:text-embedding-v4}
     mcp:
       client:
         stdio:

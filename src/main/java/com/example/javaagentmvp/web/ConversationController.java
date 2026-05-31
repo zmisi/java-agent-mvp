@@ -77,6 +77,12 @@ public class ConversationController {
         conversationRepository.delete(conversationId);
     }
 
+    @PostMapping("/{conversationId}/archive")
+    public void archive(@PathVariable String conversationId) {
+        requireConversation(conversationId);
+        conversationRepository.archive(conversationId, Instant.now());
+    }
+
     private void requireConversation(String conversationId) {
         if (!conversationRepository.exists(conversationId)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "conversation not found");

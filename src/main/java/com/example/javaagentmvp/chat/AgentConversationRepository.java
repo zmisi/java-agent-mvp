@@ -43,6 +43,10 @@ public class AgentConversationRepository {
         conversationMapper.updateTitle(id, newTitle, now);
     }
 
+    public void archive(String id, Instant archivedAt) {
+        conversationMapper.archiveById(id, archivedAt);
+    }
+
     public void delete(String id) {
         conversationMapper.deleteById(id);
     }

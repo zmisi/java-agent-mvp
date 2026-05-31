@@ -29,6 +29,10 @@ class RagQueryRouterTest {
     private static RagProperties testProperties() {
         return new RagProperties(
                 true,
+                false,
+                false,
+                "agent_ui",
+                "rag_vector_store",
                 "classpath:/rag-docs/**/*.md",
                 4,
                 0.70,
@@ -51,7 +55,8 @@ class RagQueryRouterTest {
                                         "合肥大学",
                                         java.util.List.of("合肥大学", "HFUU"),
                                         java.util.List.of("/hfuu/", "hfuu/"))),
-                        ""));
+                        ""),
+                new RagProperties.Hybrid(true, 2, 3, 3, 60, 1.0, 0.9, "auto", "simple"));
     }
 
     @Test

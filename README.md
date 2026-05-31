@@ -177,7 +177,7 @@ chmod +x bin/java-agent-mcp.js
 | `app.agent.prompt.location` | System prompt 文件（默认 `classpath:prompts/db-agent-system.md`） |
 | `app.agent.prompt.schema` | Prompt 中 `{schema}` 占位符（默认 `public`） |
 | `app.chat.memory.max-messages` | 每会话载入模型的最近消息条数（滑动窗口，默认 30） |
-| `app.chat.context-window.max-input-tokens` | 声明的模型输入 token 上限（用于 UI 占用百分比；启发式计量，默认 131072） |
+| `app.chat.context-window.max-input-tokens` | 声明的模型输入 token 上限（用于 UI 占用百分比；启发式计量，默认 16384） |
 | `spring.ai.mcp.client.stdio.servers-configuration` | MCP 配置（Postgres MCP） |
 
 ### System prompt（最佳实践）
@@ -203,6 +203,7 @@ chmod +x bin/java-agent-mcp.js
 - `GET /api/conversations/{id}/messages` — 某会话全部消息（展示用文本）  
 - `POST /api/conversations/{id}/chat` — body `{"message":"..."}`；响应含 `assistant`、`sources`（RAG）、`contextUsage`（可选，估计的输入上下文分类与占比）  
 - `PATCH /api/conversations/{id}` — body `{"title":"..."}` 重命名会话  
+- `POST /api/conversations/{id}/archive` — 归档会话（从默认列表隐藏，消息保留）  
 - `DELETE /api/conversations/{id}` — 删除会话及消息  
 
 Web UI 支持：左侧会话 `…` 菜单（重命名 / 删除）、左下角**设置**（深色 / 浅色 / 跟随系统、字体大小，保存在浏览器 `localStorage`）、输入框左侧 **Context** 圆环（最后一次发送后估计的输入上下文占用与分类分解）。

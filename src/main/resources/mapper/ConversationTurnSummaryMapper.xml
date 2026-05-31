@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.javaagentmvp.chat.persistence.mapper.ConversationTurnSummaryMapper">
+
+    <insert id="insertNextTurnSummary">
+        WITH locked_conversation AS (
+            SELECT id
+            FROM agent_ui.conversation
+            WHERE id = #{conversationId}
+            FOR UPDATE
+        ),
+        next_turn AS (
+            SELECT COALESCE(MAX(turn_id), 0) + 1 AS turn_id
+            FROM agent_ui.conversation_turn_summary
+            WHERE conversation_id = #{conversationId}
+        )
+        INSERT INTO agent_ui.conversation_turn_summary (
+            conversation_id, turn_id, goal, finding, summary_row
+        )
+        SELECT #{conversationId},
+               next_turn.turn_id,
+               #{goal},
+               #{finding},
+               #{summaryRow}
+        FROM next_turn
+    </insert>
+
+    <select id="selectRecentSummaryRows" resultType="string">
+        SELECT t.summary_row
+        FROM (
+            SELECT summary_row, turn_id
+            FROM agent_ui.conversation_turn_summary
+            WHERE conversation_id = #{conversationId}
+            ORDER BY turn_id DESC
+            LIMIT #{limit}
+        ) t
+        ORDER BY t.turn_id ASC
+    </select>
+
+</mapper>

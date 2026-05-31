@@ -33,15 +33,19 @@ app:
       summary-mode: model
       fallback-to-rules-on-failure: true
       prompt-location: classpath:prompts/compaction-system.md
-      transcript-message-limit: 16
+      transcript-message-limit: 3
       turn-summary-limit: 24
       max-chars-per-message: 6000
       temperature: 0
     # Declared input budget for UI % (tune to your model; observability only)
     context-window:
-      max-input-tokens: 131072
+      max-input-tokens: 16384
   rag:
     enabled: true
+    rebuild-on-startup: false
+    clear-before-rebuild: false
+    vector-schema-name: agent_ui
+    vector-table-name: rag_vector_store
     document-location-pattern: classpath:/rag-docs/**/*.md
     top-k: 4
     max-distance: 0.70
@@ -94,6 +98,17 @@ app:
           display-name: 安徽农业大学
           aliases: [ 安农大, 安徽农业大学, AHAU ]
           path-contains: [ '/ahau/', 'ahau/' ]
+    hybrid:
+      enabled: true
+      vector-top-k-multiplier: 2
+      lexical-top-k-multiplier: 3
+      fusion-top-k-multiplier: 3
+      rrf-k: 60
+      vector-weight: 1.0
+      lexical-weight: 0.9
+      # auto | pgroonga | postgres-fts
+      lexical-engine: auto
+      fts-dictionary: simple
 
 logging:
   level:
@@ -132,6 +147,7 @@ spring:
     username: ${AGENT_UI_DB_USER}
     password: ${AGENT_UI_DB_PASSWORD}
     hikari:
+      connection-init-sql: SET search_path TO agent_ui;
       maximum-pool-size: 8
 
   flyway:
@@ -146,6 +162,11 @@ spring:
       # Selected by profile-specific files (application-local.yml / application-online.yml)
       chat: ${APP_AI_CHAT_MODEL_PROVIDER:ollama}
       embedding: ${APP_AI_EMBEDDING_MODEL_PROVIDER:ollama}
+    vectorstore:
+      pgvector:
+        initialize-schema: true
+        schema-name: agent_ui
+        table-name: rag_vector_store
 
     # MCP Client configuration
     mcp:

@@ -1,4 +1,4 @@
-/* global $, api, escapeHtml, showToast, state, setComposerState */
+/* global $, api, escapeHtml, showToast, state, setComposerState, selectVisibleSidebarItems, appendSidebarMoreToggle */
 
 function provEl(id) {
   return document.getElementById(id);
@@ -13,6 +13,7 @@ const provisioningState = {
   preflightBusy: false,
   preflightElapsedTimer: null,
   preflightStartedAt: null,
+  sidebarExpanded: false,
 };
 
 function provStatusLabel(status) {
@@ -166,7 +167,17 @@ async function refreshProvisioningWorkspace(selectId) {
   const list = await api("/api/db-provisioning");
   const sidebar = $("dbProvisioningSidebarList");
   if (sidebar) {
-    sidebar.innerHTML = renderProvisioningSidebar(list, selectId ?? provisioningState.activeId);
+    const activeId = selectId ?? provisioningState.activeId;
+    const visibleItems =
+      typeof selectVisibleSidebarItems === "function"
+        ? selectVisibleSidebarItems(
+            list,
+            provisioningState.sidebarExpanded,
+            activeId,
+            (item) => item.id,
+          )
+        : list;
+    sidebar.innerHTML = renderProvisioningSidebar(visibleItems, activeId);
     sidebar.querySelectorAll("[data-provisioning-id]").forEach((btn) => {
       btn.addEventListener("click", () => {
         const id = btn.dataset.provisioningId;
@@ -175,6 +186,16 @@ async function refreshProvisioningWorkspace(selectId) {
         loadProvisioningDetail(id);
       });
     });
+    appendSidebarMoreToggle(
+      sidebar,
+      provisioningState.sidebarExpanded,
+      list.length,
+      visibleItems.length,
+      async () => {
+        provisioningState.sidebarExpanded = !provisioningState.sidebarExpanded;
+        await refreshProvisioningWorkspace(activeId);
+      },
+    );
   }
   updateProvisioningSidebarActive();
   if (selectId) {
