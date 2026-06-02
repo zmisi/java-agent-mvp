@@ -50,8 +50,8 @@ class RagRetrievalServiceTest {
         Set<String> chosenSources = new HashSet<>();
         documents.forEach(doc -> chosenSources.add(String.valueOf(doc.getMetadata().get("source"))));
         assertEquals(2, documents.size());
+        assertTrue(chosenSources.contains("rag-docs/hfut/charters/2025/章程.md"));
         assertTrue(chosenSources.contains("rag-docs/hfut/plans/2025/安徽/计划.md"));
-        assertTrue(chosenSources.contains("rag-docs/hfut/scores/2025/安徽/分数.md"));
     }
 
     private static String extractStringProperty(Object target, String propertyName) {
@@ -97,11 +97,11 @@ class RagRetrievalServiceTest {
                 "",
                 new RagProperties.Routing(List.of(
                         "\\brag\\b",
-                        "招生|录取|分数|专业|高考|考生|志愿|合工大|合肥工业大学|安徽"),
+                        "招生简章|招生章程|招生计划"),
                         List.of("\\b(select|from|where)\\b")),
                 new RagProperties.Admissions(
                         true,
-                        List.of("招生", "录取", "分数", "分数线", "投档", "专业", "志愿", "高考", "考生"),
+                        List.of("招生简章", "招生章程", "章程", "简章", "政策", "规则", "专项", "转专业", "体检", "投档", "招生计划"),
                         4,
                         12,
                         List.of(

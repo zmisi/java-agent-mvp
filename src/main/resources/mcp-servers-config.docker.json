@@ -1,11 +1,13 @@
 {
   "mcpServers": {
-    "postgres-emp-readonly": {
+    "admission-score": {
       "command": "node",
       "args": [
-        "/usr/local/bin/mcp-server-postgres.js",
-        "postgresql://agent:agent@postgres:5432/employees?options=-c%20search_path%3Demp"
-      ]
+        "/app/admission-score-mcp/dist/index.js"
+      ],
+      "env": {
+        "DATABASE_URL": "postgresql://agent:agent@postgres:5432/employees"
+      }
     }
   }
 }

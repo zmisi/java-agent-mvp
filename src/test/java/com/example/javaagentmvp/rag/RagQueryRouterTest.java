@@ -13,7 +13,7 @@ class RagQueryRouterTest {
             "\\brag\\b",
             "spring\\s*ai|questionansweradvisor|simplevectorstore|embedding|vector\\s*store",
             "微调|知识库|向量|检索增强|文档问答",
-            "招生|录取|分数|专业|高考|考生|志愿|合工大|合肥工业大学|安徽");
+            "招生简章|招生章程|录取规则|招生政策|录取办法|投档规则|体检要求|加分政策|转专业|专项计划|振兴计划|高校专项|国家专项|地方专项|中外合作|专升本|招生计划");
 
     private static final List<String> DATABASE_PATTERNS = List.of(
             "\\b(list|show|describe|desc)\\b[\\s\\S]{0,40}\\btables?\\b|\\btables?\\b[\\s\\S]{0,20}\\b(list|show|all)\\b",
@@ -22,7 +22,10 @@ class RagQueryRouterTest {
             "\\b(select|insert|update|delete|from|where|join|group by|order by)\\b",
             "\\b(employee|department|salary|title|postgres|postgresql|sql|database|db)\\b",
             "\\b(how many|count|aggregate|sum|avg|max|min)\\b",
-            "数据库|数据表|表结构|表名|列名|员工|部门|薪资|统计");
+            "数据库|数据表|表结构|表名|列名|员工|部门|薪资|统计",
+            "\\d{3,4}\\s*分[\\s\\S]{0,60}(专业|报考|报志愿|志愿|可报|能上|录取|哪些|什么|报什么|能上什么)",
+            "(专业|报考|报志愿|志愿|可报|能上|录取)[\\s\\S]{0,60}\\d{3,4}\\s*分",
+            "(多少|几分|考了|高考)\\s*\\d{3,4}\\s*分[\\s\\S]{0,40}(专业|学校|院校|报|志愿)");
 
     private final RagQueryRouter router = new RagQueryRouter(testProperties());
 
@@ -41,7 +44,7 @@ class RagQueryRouterTest {
                 new RagProperties.Routing(RAG_PATTERNS, DATABASE_PATTERNS),
                 new RagProperties.Admissions(
                         true,
-                        java.util.List.of("招生", "录取", "分数", "分数线", "投档", "专业", "志愿", "高考", "考生"),
+                        java.util.List.of("招生简章", "招生章程", "章程", "简章", "政策", "规则", "专项", "转专业", "体检", "投档", "招生计划"),
                         4,
                         12,
                         java.util.List.of(
@@ -73,8 +76,34 @@ class RagQueryRouterTest {
     }
 
     @Test
-    void usesRagForAdmissionsQuestions() {
-        RagQueryRouter.Decision decision = router.decide("安徽考生 625 分 可以上合工大哪些专业");
+    void skipsRagForScoreMajorQueries() {
+        RagQueryRouter.Decision decision = router.decide("安徽考生630分可以报考合工大什么专业");
+        assertFalse(decision.useRag());
+        assertFalse(decision.shouldRetrieve());
+    }
+
+    @Test
+    void usesRagForAdmissionsBrochureQuestions() {
+        RagQueryRouter.Decision decision = router.decide("合工大2025年招生章程有哪些录取规则");
+        assertTrue(decision.useRag());
+    }
+
+    @Test
+    void skipsRagForScoreQueryFollowUp() {
+        RagQueryRouter.Decision decision = router.decide(
+                "安徽，物理类， 2025， 普通批",
+                List.of("630分可以报考什么专业"),
+                List.of("请提供您的所在省份和科类（物理类/历史类），以便查询630分可报考的专业。"));
+        assertFalse(decision.useRag());
+        assertFalse(decision.shouldRetrieve());
+    }
+
+    @Test
+    void usesRagWhenFollowUpIsBrochureNotScoreParams() {
+        RagQueryRouter.Decision decision = router.decide(
+                "合工大2025年招生章程",
+                List.of("630分可以报考什么专业"),
+                List.of("请提供您的所在省份和科类"));
         assertTrue(decision.useRag());
     }
 

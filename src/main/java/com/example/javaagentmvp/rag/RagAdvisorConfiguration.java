@@ -6,7 +6,6 @@ import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.Ordered;
 
 @Configuration
 @ConditionalOnProperty(prefix = "app.rag", name = "enabled", havingValue = "true", matchIfMissing = true)
@@ -36,6 +35,6 @@ public class RagAdvisorConfiguration {
 
     @Bean
     RagFlowLoggingAdvisor ragFlowLoggingAdvisor() {
-        return new RagFlowLoggingAdvisor(Ordered.LOWEST_PRECEDENCE - 100);
+        return new RagFlowLoggingAdvisor(RagAdvisorOrder.FLOW_LOGGING);
     }
 }

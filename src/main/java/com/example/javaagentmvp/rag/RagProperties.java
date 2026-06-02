@@ -28,7 +28,7 @@ public record RagProperties(
         if (admissions == null) {
             admissions = new Admissions(
                     true,
-                    List.of("招生", "录取", "分数", "分数线", "投档", "专业", "志愿", "高考", "考生"),
+                    List.of("招生简章", "招生章程", "章程", "简章", "政策", "规则", "专项", "转专业", "体检", "投档", "招生计划"),
                     4,
                     12,
                     List.of(),
@@ -50,8 +50,8 @@ public record RagProperties(
     }
 
     /**
-     * Admissions-style question routing: when a question is about scores/majors but does not mention
-     * a specific school, we fan out retrieval across all configured schools and merge results.
+     * Brochure/policy-style question routing: when a question is about charters or policies but does not
+     * mention a specific school, fan out retrieval across all configured schools and merge results.
      */
     public record Admissions(
             @DefaultValue("true") boolean enabled,
@@ -107,10 +107,10 @@ public record RagProperties(
     private static String defaultAnswerFormatTemplate() {
         return """
                 回答格式要求（必须遵守）：
-                1. 按学校分组输出，每个学校单独成段，标题使用学校中文全称。
-                2. 每所学校下列出与考生分数相关的专业、录取分数/投档线等信息；注明资料来源文件名。
-                3. 若某学校在上下文中没有分数或专业信息，明确写「资料未包含该校录取分数」。
-                4. 仅根据上下文回答，不得编造；缺少省份、科类、批次、校区等信息时，向用户追问。
+                1. 根据知识库检索到的招生简章、章程或政策内容回答；注明资料来源文件名。
+                2. 多校对比时按学校分组输出，标题使用学校中文全称。
+                3. 仅根据上下文回答，不得编造；上下文中没有的信息应明确说明。
+                4. 缺少年份、校区、招生类型等关键信息时，向用户追问。
                 """;
     }
 

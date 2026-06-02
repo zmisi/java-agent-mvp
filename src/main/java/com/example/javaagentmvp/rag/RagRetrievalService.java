@@ -80,7 +80,7 @@ public class RagRetrievalService {
                 ? Math.max(ragProperties.topK(), ragProperties.topK() * 3)
                 : ragProperties.topK();
         List<Document> candidates = hybridSearch(flowId, retrievalQuery, candidateTopK, "检索相关资料");
-        return prioritizeAdmissionsSources(candidates, admissionsIntent, mentionsSpecificSchool, ragProperties.topK());
+        return prioritizeAdmissionsSources(candidates, admissionsIntent, ragProperties.topK());
     }
 
     private List<Document> hybridSearch(String flowId, String query, int topK, String label) {
@@ -580,7 +580,6 @@ public class RagRetrievalService {
     private static List<Document> prioritizeAdmissionsSources(
             List<Document> documents,
             boolean admissionsIntent,
-            boolean mentionsSpecificSchool,
             int limit) {
         if (!admissionsIntent || documents.isEmpty()) {
             if (documents.size() <= limit) {
@@ -590,25 +589,20 @@ public class RagRetrievalService {
         }
         List<Document> sorted = new ArrayList<>(documents);
         sorted.sort(Comparator
-                .comparingInt((Document doc) -> sourceTypePriority(sourceOf(doc))).reversed()
+                .comparingInt((Document doc) -> sourceTypePriority(sourceOf(doc), true)).reversed()
                 .thenComparing(Comparator.comparingDouble(RagRetrievalService::rrfScoreOf).reversed())
                 .thenComparingDouble(RagRetrievalService::distanceOf));
-        // Generic admissions policy: prefer plans/scores, keep charters only as fallback.
+
         List<Document> preferred = sorted.stream()
-                .filter(doc -> sourceTypePriority(sourceOf(doc)) > 0)
+                .filter(doc -> sourceTypePriority(sourceOf(doc), true) >= 2)
                 .toList();
-        List<Document> neutral = sorted.stream()
-                .filter(doc -> sourceTypePriority(sourceOf(doc)) == 0)
-                .toList();
-        List<Document> discouraged = sorted.stream()
-                .filter(doc -> sourceTypePriority(sourceOf(doc)) < 0)
+        List<Document> fallback = sorted.stream()
+                .filter(doc -> sourceTypePriority(sourceOf(doc), true) < 2)
                 .toList();
 
         List<Document> picked = new ArrayList<>(Math.min(limit, sorted.size()));
         appendUntilLimit(picked, preferred, limit);
-        appendUntilLimit(picked, neutral, limit);
-        // Only include charters when preferred/neutral are insufficient.
-        appendUntilLimit(picked, discouraged, limit);
+        appendUntilLimit(picked, fallback, limit);
         return picked;
     }
 
@@ -632,15 +626,21 @@ public class RagRetrievalService {
         return source == null ? "" : source.toString().toLowerCase(Locale.ROOT);
     }
 
-    private static int sourceTypePriority(String source) {
-        if (source.contains("/plans/")) {
-            return 2;
+    private static int sourceTypePriority(String source, boolean admissionsIntent) {
+        if (admissionsIntent) {
+            if (source.contains("/charters/")) {
+                return 3;
+            }
+            if (source.contains("/plans/")) {
+                return 2;
+            }
+            if (source.contains("/scores/")) {
+                return 1;
+            }
+            return 0;
         }
-        if (source.contains("/scores/")) {
-            return 2;
-        }
-        if (source.contains("/charters/")) {
-            return -1;
+        if (source.contains("/plans/") || source.contains("/charters/") || source.contains("/scores/")) {
+            return 1;
         }
         return 0;
     }

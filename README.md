@@ -2,6 +2,10 @@
 
 PostgreSQL 只读查询 Agent（Spring AI + DashScope Qwen + MCP），带 **Web UI** 与 **会话持久化**（本机 PostgreSQL `agent_ui` schema）。
 
+## 免责声明
+
+本项目**仅供学习交流**使用。未经项目维护者书面授权，不得将本项目（含源代码、文档、示例数据及衍生成果）用于任何**商业用途**。
+
 ## 容器一键运行（Docker / Podman）
 
 无需本机安装 Java、PostgreSQL、Node。项目提供 `Dockerfile` 与 `docker-compose.yml`，**Docker** 与 **Podman**（含 [Podman Desktop](https://podman-desktop.io/)）均可使用，命令将 `docker` 换成 `podman` 即可。
@@ -10,7 +14,14 @@ PostgreSQL 只读查询 Agent（Spring AI + DashScope Qwen + MCP），带 **Web 
 
 ### Docker
 
-安装 [Docker](https://docs.docker.com/get-docker/)（含 Docker Compose）后：
+安装 [Docker](https://docs.docker.com/get-docker/)（含 Docker Compose）后，与 **admission-score-mcp**、**data-collection** 同级 checkout：
+
+```text
+git/
+├── java-agent-mvp/
+├── data-collection/      # admissions-init 镜像来源
+└── admission-score-mcp/
+```
 
 ```bash
 cp .env.example .env
@@ -56,10 +67,13 @@ podman logout docker.io
 
 | 服务 | 说明 |
 |------|------|
-| `postgres` | PostgreSQL 16，库 `employees`，用户/密码 `agent`/`agent` |
-| `app` | Spring Boot（`docker` profile），内置 Node + Postgres MCP |
+| `postgres` | PostgreSQL 16，库 `employees`，用户/密码 `agent`/`agent`；**本机**连 `127.0.0.1:5431`（容器内仍为 5432） |
+| `admissions-init` | 一次性任务：build **data-collection** 镜像，migrate + 导入 HFUT 招生数据到 **`admissions`** schema |
+| `app` | Spring Boot（`docker` profile），内置 Node + Postgres MCP + admission-score MCP |
 
-首次启动时 `docker/postgres/init/` 会创建 **`emp`** schema 及与 [employees 示例库](https://github.com/datacharmer/test_db) 一致的 6 张表（`employee`、`department` 等），并导入约 500 名员工的子集；Flyway 在 **`agent_ui`** schema 建会话表。若需与本地全量数据一致，可运行 `./scripts/generate-docker-emp-seed.sh` 后执行 `compose down -v && compose up`（Docker 或 Podman 均可）。
+首次启动时 `docker/postgres/init/` 会创建 **`emp`** schema 及与 [employees 示例库](https://github.com/datacharmer/test_db) 一致的 6 张表（`employee`、`department` 等），并导入约 500 名员工的子集；Flyway 在 **`agent_ui`** schema 建会话表；**`admissions`** 由 `admissions-init` 写入（非 Flyway、非 initdb.d）。若需与本地全量数据一致，可运行 `./scripts/generate-docker-emp-seed.sh` 后执行 `compose down -v && compose up`（Docker 或 Podman 均可）。
+
+单独重导招生数据：`docker compose run --rm admissions-init`（Podman 用 `./scripts/podman-compose.sh run --rm admissions-init`）。
 
 停止并删除数据卷：`docker compose down -v` 或 `podman compose down -v`
 
@@ -69,9 +83,15 @@ podman logout docker.io
 
 ## 运行（Web UI，默认）
 
-1. 确保本机 PostgreSQL 可连接，且 `mcp-servers-config.json` 里的连接与 `application.yml` 的 `spring.datasource` 指向同一实例即可（库名默认 `opstream`）。
-2. 设置 `DASHSCOPE_API_KEY`；如数据库需要密码，设置 `AGENT_UI_DB_PASSWORD`。
-3. 启动：
+1. 确保本机 PostgreSQL 可连接，且 `mcp-servers-config.json` 里的连接与 `application.yml` 的 `spring.datasource` 指向同一实例即可（库名默认 `employees`）。
+2. **（本机开发，结构化招生分数/计划）** 在 **data-collection** 仓库执行 `python scripts/migrate_db.py` 与 `python scripts/import_hfut_to_db.py`。**Docker Compose 已自动执行**（`admissions-init` 服务）；本机手动步骤仅在不使用容器时需要。
+3. **admission-score MCP**（与 `java-agent-mvp` 同级目录 `admission-score-mcp`）：
+   ```bash
+   cd ../admission-score-mcp && npm install && npm run build
+   ```
+   Chat 会加载 `admission-score` MCP（工具 `getMajorByScore`）。脚本路径见 `mcp-servers-config.json`（默认 `../admission-score-mcp/dist/index.js`）。
+4. 设置 `DASHSCOPE_API_KEY`；如数据库需要密码，设置 `AGENT_UI_DB_PASSWORD`。
+5. 启动：
 
 ```bash
 export DASHSCOPE_API_KEY=...
@@ -79,7 +99,7 @@ export DASHSCOPE_API_KEY=...
 mvn spring-boot:run
 ```
 
-4. 浏览器打开 `http://localhost:8080/`  
+6. 浏览器打开 `http://localhost:8080/`  
    - 左侧会话列表，**新对话** 创建会话；点选会话查看历史。  
    - 消息与模型侧窗口一致写入 `agent_ui.chat_memory_message`（含 tool 调用/结果 JSON）。
    - 主 Chat 已集成 RAG：可问数据库，也可问内置 Markdown 知识库（如 `RAG 和微调有什么区别？`）。
@@ -106,9 +126,9 @@ RAG 和微调有什么区别？
 
 关闭 RAG：`app.rag.enabled=false`（恢复纯 DB Agent 行为）。
 
-路由规则（走 RAG 还是走 MCP 查库）在 `application.yml` 的 `app.rag.routing.rag-patterns` / `database-patterns` 中配置（Java 正则，不区分大小写），改配置即可扩展，无需改 Java。
+路由规则在 `application.yml` 的 `app.rag.routing.database-patterns` / `rag-patterns` 中配置（Java 正则，不区分大小写）：**分数查专业**命中 `database-patterns` 后跳过 RAG，由模型调用 `getMajorByScore`；**招生简章/政策**命中 `rag-patterns` 后走知识库检索。
 
-招生类问题（含分数/专业等关键词且未点名学校）会按 `app.rag.admissions.schools` 对每所大学分别检索并合并；回答格式由 `app.rag.admissions.answer-format-template` 约束（按学校分组输出）。
+多校招生简章/政策类问题（未点名学校）会按 `app.rag.admissions.schools` 对每所大学分别检索并合并；回答格式由 `app.rag.admissions.answer-format-template` 约束。
 
 后端 RAG 日志步骤标签（`RagFlowLogStep`）：`[question]` → `[retrieve]` →（多校时）`[format]` → `[prompt]` → `[answer]`。
 
@@ -178,7 +198,7 @@ chmod +x bin/java-agent-mcp.js
 | `app.agent.prompt.schema` | Prompt 中 `{schema}` 占位符（默认 `public`） |
 | `app.chat.memory.max-messages` | 每会话载入模型的最近消息条数（滑动窗口，默认 30） |
 | `app.chat.context-window.max-input-tokens` | 声明的模型输入 token 上限（用于 UI 占用百分比；启发式计量，默认 16384） |
-| `spring.ai.mcp.client.stdio.servers-configuration` | MCP 配置（Postgres MCP） |
+| `spring.ai.mcp.client.stdio.servers-configuration` | MCP 配置（`admission-score`） |
 
 ### System prompt（最佳实践）
 

@@ -5,7 +5,6 @@ import org.springframework.ai.chat.client.ChatClientRequest;
 import org.springframework.ai.chat.client.ChatClientResponse;
 import org.springframework.ai.chat.client.advisor.api.CallAdvisor;
 import org.springframework.ai.chat.client.advisor.api.CallAdvisorChain;
-import org.springframework.core.Ordered;
 
 /**
  * Applies {@link QuestionAnswerAdvisor} only when {@link RagFlowContext} has not marked the
@@ -18,7 +17,7 @@ public class ConditionalQuestionAnswerAdvisor implements CallAdvisor {
     private final int order;
 
     public ConditionalQuestionAnswerAdvisor(QuestionAnswerAdvisor delegate) {
-        this(delegate, Ordered.HIGHEST_PRECEDENCE + 300);
+        this(delegate, RagAdvisorOrder.CONDITIONAL_QA);
     }
 
     public ConditionalQuestionAnswerAdvisor(QuestionAnswerAdvisor delegate, int order) {

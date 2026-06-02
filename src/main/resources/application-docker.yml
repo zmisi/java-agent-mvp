@@ -18,7 +18,8 @@ app:
     targets:
       chat-readonly:
         type: mcp
-        server: postgres-emp-readonly
+        servers:
+          - admission-score
       test-deploy:
         type: jdbc
         schema: emp_test

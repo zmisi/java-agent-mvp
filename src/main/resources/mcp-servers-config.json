@@ -1,11 +1,13 @@
 {
   "mcpServers": {
-    "postgres-emp-readonly": {
-      "command": "/opt/homebrew/bin/node",
+    "admission-score": {
+      "command": "node",
       "args": [
-        "/opt/homebrew/lib/node_modules/@modelcontextprotocol/server-postgres/dist/index.js",
-        "postgresql://dbagent@127.0.0.1:5432/employees?options=-c%20search_path%3Demp"
-      ]
+        "../admission-score-mcp/dist/index.js"
+      ],
+      "env": {
+        "DATABASE_URL": "postgresql://dbagent@127.0.0.1:5432/employees"
+      }
     }
   }
 }

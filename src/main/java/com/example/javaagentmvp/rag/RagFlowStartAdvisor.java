@@ -10,7 +10,6 @@ import org.springframework.ai.chat.client.advisor.api.CallAdvisorChain;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.MessageType;
 import org.springframework.ai.document.Document;
-import org.springframework.core.Ordered;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -30,7 +29,7 @@ public class RagFlowStartAdvisor implements CallAdvisor {
     private final int order;
 
     public RagFlowStartAdvisor(RagRetrievalService ragRetrievalService, RagQueryRouter ragQueryRouter) {
-        this(ragRetrievalService, ragQueryRouter, Ordered.HIGHEST_PRECEDENCE + 100);
+        this(ragRetrievalService, ragQueryRouter, RagAdvisorOrder.FLOW_START);
     }
 
     public RagFlowStartAdvisor(RagRetrievalService ragRetrievalService, RagQueryRouter ragQueryRouter, int order) {
@@ -46,11 +45,16 @@ public class RagFlowStartAdvisor implements CallAdvisor {
         UserTurnContext userTurnContext = extractUserTurnContext(request);
         String userMessage = userTurnContext.currentUserMessage();
 
-        RagQueryRouter.Decision preliminary = ragQueryRouter.decide(userMessage);
+        RagQueryRouter.Decision preliminary = ragQueryRouter.decide(
+                userMessage,
+                userTurnContext.priorUserMessages(),
+                userTurnContext.priorContextHints());
         if (!preliminary.useRag() && !preliminary.shouldRetrieve()) {
             RagFlowContext.skip(preliminary.reason());
             log.info("========== RAG skipped [{}] — {} ==========", flowId, preliminary.reason());
             log.info("[RAG {}] user message (MCP path):\n{}", flowId, userMessage);
+            log.debug("[RAG {}] routing context — priorUserTurns={}, contextHints={}",
+                    flowId, userTurnContext.priorUserMessages().size(), userTurnContext.priorContextHints().size());
             return chain.nextCall(request);
         }
 

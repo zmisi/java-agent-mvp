@@ -9,7 +9,6 @@ import org.springframework.ai.chat.client.advisor.api.CallAdvisorChain;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.MessageType;
 import org.springframework.ai.document.Document;
-import org.springframework.core.Ordered;
 
 import java.util.List;
 
@@ -27,7 +26,7 @@ public class AdmissionsAnswerFormatAdvisor implements CallAdvisor {
     private final int order;
 
     public AdmissionsAnswerFormatAdvisor(RagProperties ragProperties) {
-        this(ragProperties, Ordered.HIGHEST_PRECEDENCE + 200);
+        this(ragProperties, RagAdvisorOrder.ADMISSIONS_FORMAT);
     }
 
     public AdmissionsAnswerFormatAdvisor(RagProperties ragProperties, int order) {

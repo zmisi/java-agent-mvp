@@ -57,12 +57,13 @@ public class DbAgentTargetRegistry {
 
     public List<McpSyncClient> chatMcpClients() {
         DbTarget target = requireMcpTarget(chatTargetKey());
+        List<String> serverNames = target.mcpServerNames();
         List<McpSyncClient> filtered = mcpClients.stream()
-                .filter(client -> mcpClientMatchesServer(client, target.server()))
+                .filter(client -> serverNames.stream().anyMatch(name -> mcpClientMatchesServer(client, name)))
                 .toList();
         if (filtered.isEmpty()) {
             throw new IllegalStateException(
-                    "No MCP client matched server '" + target.server() + "' for chat target '" + chatTargetKey() + "'");
+                    "No MCP client matched servers " + serverNames + " for chat target '" + chatTargetKey() + "'");
         }
         return filtered;
     }
@@ -77,7 +78,7 @@ public class DbAgentTargetRegistry {
                 deploy.type() == DbTarget.TargetType.JDBC ? deploy.schema() : "-",
                 chatTargetKey(),
                 chat.type(),
-                chat.type() == DbTarget.TargetType.MCP ? chat.server() : "-");
+                chat.type() == DbTarget.TargetType.MCP ? chat.mcpServerNames() : "-");
     }
 
     private DbTarget requireTarget(String key) {
@@ -107,8 +108,8 @@ public class DbAgentTargetRegistry {
         if (target.type() != DbTarget.TargetType.MCP) {
             throw new IllegalStateException("Target '" + key + "' must be mcp, found " + target.type());
         }
-        if (target.server() == null || target.server().isBlank()) {
-            throw new IllegalStateException("MCP target '" + key + "' requires server");
+        if (target.mcpServerNames().isEmpty()) {
+            throw new IllegalStateException("MCP target '" + key + "' requires server or servers");
         }
         return target;
     }
