@@ -1,18 +1,19 @@
 # Build context must be the parent directory (see docker-compose.yml):
 #   git/admission-score-mcp + git/java-agent-mvp as siblings
 
-ARG BASE_IMAGE
+ARG MAVEN_IMAGE=m.daocloud.io/docker.io/maven:3.9-eclipse-temurin-21
 ARG NODE_IMAGE=m.daocloud.io/docker.io/node:20-bookworm-slim
 ARG RUNTIME_IMAGE=m.daocloud.io/docker.io/eclipse-temurin:17-jre-jammy
-FROM ${BASE_IMAGE} AS build-java
+FROM ${MAVEN_IMAGE} AS build-java
 WORKDIR /app/java-agent-mvp
-COPY java-agent-mvp/pom.xml java-agent-mvp/mvnw ./
+COPY java-agent-mvp/pom.xml ./
 COPY java-agent-mvp/.mvn .mvn
-RUN chmod +x mvnw && ./mvnw -B -DskipTests dependency:go-offline
+RUN mkdir -p /root/.m2 && cp .mvn/settings.xml /root/.m2/settings.xml
+RUN mvn -B -DskipTests dependency:go-offline
 COPY java-agent-mvp/src src
 COPY java-agent-mvp/docs/design docs/design
 COPY java-agent-mvp/db/releases db/releases
-RUN ./mvnw -B -DskipTests package
+RUN mvn -B -DskipTests package
 
 FROM ${NODE_IMAGE} AS build-mcp
 WORKDIR /app/admission-score-mcp
