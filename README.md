@@ -25,7 +25,7 @@ git/
 
 ```bash
 cp .env.example .env
-# 编辑 .env，填入 DASHSCOPE_API_KEY
+# 编辑 .env：DASHSCOPE_API_KEY、WECHAT_APP_ID、WECHAT_APP_SECRET、WECHAT_JWT_SECRET（微信小程序登录必填）
 
 docker compose up --build
 ```
@@ -38,7 +38,7 @@ docker compose up --build
 
 ```bash
 cp .env.example .env
-# 编辑 .env，填入 DASHSCOPE_API_KEY
+# 编辑 .env：DASHSCOPE_API_KEY、WECHAT_APP_ID、WECHAT_APP_SECRET、WECHAT_JWT_SECRET
 
 ./scripts/fix-podman-env.sh          # 首次使用 Podman 时执行一次
 ./scripts/podman-compose.sh up --build
@@ -150,13 +150,18 @@ CLI 会话 ID 形如 `cli-<uuid>`，同样写入 `agent_ui`（启动时自动插
 
 ### Flyway（本地开发）
 
-若启动报 `Migration checksum mismatch for migration version 3`，说明 `V3__db_provisioning.sql` 在已执行后被修改过。在**开发库**可修复元数据：
+若启动报 `Migration checksum mismatch for migration version N`，说明 `VN__*.sql` 在**已执行后被修改过**。在**开发库**可修复 Flyway 元数据（不重复执行 SQL）：
 
 ```bash
+# 本机直连 Postgres（默认 5432）
 mvn flyway:repair -Dflyway.user="$AGENT_UI_DB_USER"
+
+# Docker Compose（postgres 映射到宿主机 5431，用户/密码见 docker-compose.yml）
+AGENT_UI_DB_USER=agent AGENT_UI_DB_PASSWORD=agent \
+  mvn flyway:repair -Dflyway.url=jdbc:postgresql://127.0.0.1:5431/employees
 ```
 
-（密码使用环境变量 `AGENT_UI_DB_PASSWORD`，与 `application.yml` 一致。）之后不要再改已应用的 `V3` 文件，新变更请新增 `V4__*.sql`。
+（密码使用环境变量 `AGENT_UI_DB_PASSWORD`。）之后**不要改**已应用的 `V3`/`V9` 等文件，新变更请新增更高版本号迁移，例如 `V15__*.sql`。常见案例：V9 `rag_vector_store` 索引脚本改为带 `DO $$` 保护后需 repair。
 
 若曾跑过早期草稿版 V3（列名如 `server_target`），请确保已执行 `V4__provisioning_schema_align.sql`（`mvn flyway:migrate`）。
 
