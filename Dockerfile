@@ -1,7 +1,10 @@
 # Build context must be the parent directory (see docker-compose.yml):
 #   git/admission-score-mcp + git/java-agent-mvp as siblings
 
-FROM public.ecr.aws/docker/library/maven:3.9.9-eclipse-temurin-17 AS build-java
+ARG BASE_IMAGE
+ARG NODE_IMAGE=m.daocloud.io/docker.io/node:20-bookworm-slim
+ARG RUNTIME_IMAGE=m.daocloud.io/docker.io/eclipse-temurin:17-jre-jammy
+FROM ${BASE_IMAGE} AS build-java
 WORKDIR /app/java-agent-mvp
 COPY java-agent-mvp/pom.xml java-agent-mvp/mvnw ./
 COPY java-agent-mvp/.mvn .mvn
@@ -11,7 +14,7 @@ COPY java-agent-mvp/docs/design docs/design
 COPY java-agent-mvp/db/releases db/releases
 RUN ./mvnw -B -DskipTests package
 
-FROM public.ecr.aws/docker/library/node:20-bookworm-slim AS build-mcp
+FROM ${NODE_IMAGE} AS build-mcp
 WORKDIR /app/admission-score-mcp
 COPY admission-score-mcp/package.json admission-score-mcp/package-lock.json ./
 RUN npm ci
@@ -19,7 +22,7 @@ COPY admission-score-mcp/tsconfig.json ./
 COPY admission-score-mcp/src ./src
 RUN npm run build
 
-FROM public.ecr.aws/docker/library/eclipse-temurin:17-jre-jammy
+FROM ${RUNTIME_IMAGE}
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \

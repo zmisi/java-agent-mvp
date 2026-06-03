@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: pgvector/pgvector:pg16
+    image: m.daocloud.io/docker.io/pgvector/pgvector:pg16
     environment:
       POSTGRES_USER: agent
       POSTGRES_PASSWORD: agent
@@ -20,6 +20,8 @@ services:
     build:
       context: ../data-collection
       dockerfile: Dockerfile.db-init
+      args:
+        BASE_IMAGE: m.daocloud.io/docker.io/python:3.12-slim
     environment:
       DATABASE_URL: postgresql://agent:agent@postgres:5432/employees
     depends_on:
@@ -31,6 +33,8 @@ services:
     build:
       context: ..
       dockerfile: java-agent-mvp/Dockerfile
+      args:
+        BASE_IMAGE: m.daocloud.io/docker.io/eclipse-temurin:21-jdk
     ports:
       - "8080:8080"
     environment:
