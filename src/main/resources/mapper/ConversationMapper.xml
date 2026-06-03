@@ -4,13 +4,13 @@
 <mapper namespace="com.example.javaagentmvp.chat.persistence.mapper.ConversationMapper">
 
     <insert id="insert">
-        INSERT INTO agent_ui.conversation (id, title, created_at, updated_at)
-        VALUES (#{id}, #{title}, #{createdAt}, #{updatedAt})
+        INSERT INTO agent_ui.conversation (id, title, created_at, updated_at, user_id)
+        VALUES (#{id}, #{title}, #{createdAt}, #{updatedAt}, #{userId})
     </insert>
 
     <insert id="insertIfMissing">
-        INSERT INTO agent_ui.conversation (id, title, created_at, updated_at)
-        VALUES (#{id}, #{title}, #{createdAt}, #{updatedAt})
+        INSERT INTO agent_ui.conversation (id, title, created_at, updated_at, user_id)
+        VALUES (#{id}, #{title}, #{createdAt}, #{updatedAt}, #{userId})
         ON CONFLICT (id) DO NOTHING
     </insert>
 
@@ -21,10 +21,21 @@
           AND archived_at IS NULL
     </select>
 
+    <select id="countByIdAndUserId" resultType="int">
+        SELECT COUNT(*)::int
+        FROM agent_ui.conversation
+        WHERE id = #{id}
+          AND user_id = #{userId}
+          AND archived_at IS NULL
+    </select>
+
     <update id="touchUpdatedAt">
         UPDATE agent_ui.conversation
         SET updated_at = #{updatedAt}
         WHERE id = #{id}
+        <if test="scopeByUser">
+            AND user_id = #{userId}
+        </if>
     </update>
 
     <update id="updateTitleIfDefault">
@@ -33,6 +44,9 @@
             updated_at = #{updatedAt}
         WHERE id = #{id}
           AND title IN ('新对话', 'CLI 会话')
+        <if test="scopeByUser">
+            AND user_id = #{userId}
+        </if>
     </update>
 
     <update id="updateTitle">
@@ -41,6 +55,9 @@
             updated_at = #{updatedAt}
         WHERE id = #{id}
           AND archived_at IS NULL
+        <if test="scopeByUser">
+            AND user_id = #{userId}
+        </if>
     </update>
 
     <update id="archiveById">
@@ -49,11 +66,17 @@
             updated_at = #{archivedAt}
         WHERE id = #{id}
           AND archived_at IS NULL
+        <if test="scopeByUser">
+            AND user_id = #{userId}
+        </if>
     </update>
 
     <delete id="deleteById">
         DELETE FROM agent_ui.conversation
         WHERE id = #{id}
+        <if test="scopeByUser">
+            AND user_id = #{userId}
+        </if>
     </delete>
 
     <select id="listSummaries"
@@ -64,6 +87,19 @@
                updated_at::text AS updated_at
         FROM agent_ui.conversation
         WHERE archived_at IS NULL
+        ORDER BY updated_at DESC
+        LIMIT 200
+    </select>
+
+    <select id="listSummariesByUserId"
+            resultType="com.example.javaagentmvp.chat.persistence.model.ConversationSummaryRow">
+        SELECT id,
+               title,
+               created_at::text AS created_at,
+               updated_at::text AS updated_at
+        FROM agent_ui.conversation
+        WHERE archived_at IS NULL
+          AND user_id = #{userId}
         ORDER BY updated_at DESC
         LIMIT 200
     </select>

@@ -55,12 +55,11 @@ public class AuthInterceptor implements HandlerInterceptor {
                 writeError(response, HttpStatus.FORBIDDEN, "USER_DISABLED", "账号已禁用");
                 return false;
             }
-            authSessionService.validateAndTouch(user.sessionId());
-            if (request.getRequestURI() != null && request.getRequestURI().startsWith("/api/admin")) {
-                if (user.role() != UserRole.ADMIN) {
-                    writeError(response, HttpStatus.FORBIDDEN, "FORBIDDEN", "需要 admin 权限");
-                    return false;
-                }
+            authSessionService.validateAndTouch(user.sessionId(), user.jti());
+            String uri = request.getRequestURI();
+            if (!ApiAccessPolicy.isAllowed(user.role(), uri)) {
+                writeError(response, HttpStatus.FORBIDDEN, "FORBIDDEN", "无权访问该接口");
+                return false;
             }
             request.setAttribute(AUTH_USER_ATTR, user);
             return true;

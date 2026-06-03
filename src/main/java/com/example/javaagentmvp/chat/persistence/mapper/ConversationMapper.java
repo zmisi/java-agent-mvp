@@ -17,23 +17,42 @@ public interface ConversationMapper {
 
     int countById(@Param("id") String id);
 
-    int touchUpdatedAt(@Param("id") String id, @Param("updatedAt") Instant updatedAt);
+    int countByIdAndUserId(@Param("id") String id, @Param("userId") long userId);
+
+    int touchUpdatedAt(
+            @Param("id") String id,
+            @Param("updatedAt") Instant updatedAt,
+            @Param("scopeByUser") boolean scopeByUser,
+            @Param("userId") long userId);
 
     int updateTitleIfDefault(
             @Param("id") String id,
             @Param("title") String title,
-            @Param("updatedAt") Instant updatedAt);
+            @Param("updatedAt") Instant updatedAt,
+            @Param("scopeByUser") boolean scopeByUser,
+            @Param("userId") long userId);
 
     int updateTitle(
             @Param("id") String id,
             @Param("title") String title,
-            @Param("updatedAt") Instant updatedAt);
+            @Param("updatedAt") Instant updatedAt,
+            @Param("scopeByUser") boolean scopeByUser,
+            @Param("userId") long userId);
 
-    int archiveById(@Param("id") String id, @Param("archivedAt") Instant archivedAt);
+    int archiveById(
+            @Param("id") String id,
+            @Param("archivedAt") Instant archivedAt,
+            @Param("scopeByUser") boolean scopeByUser,
+            @Param("userId") long userId);
 
-    int deleteById(@Param("id") String id);
+    int deleteById(
+            @Param("id") String id,
+            @Param("scopeByUser") boolean scopeByUser,
+            @Param("userId") long userId);
 
     List<ConversationSummaryRow> listSummaries();
+
+    List<ConversationSummaryRow> listSummariesByUserId(@Param("userId") long userId);
 
     String selectTitleById(@Param("id") String id);
 }

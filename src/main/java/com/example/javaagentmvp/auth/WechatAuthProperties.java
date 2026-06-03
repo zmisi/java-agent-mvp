@@ -16,6 +16,7 @@ public record WechatAuthProperties(
         long sessionMaxSeconds,
         int guestQuotaLimit,
         int guestLoginLimit,
+        int loginRateLimitPerMinute,
         String avatarUploadDir,
         String bootstrapAdminOpenids) {
 

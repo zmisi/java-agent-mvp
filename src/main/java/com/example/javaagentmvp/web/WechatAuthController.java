@@ -1,6 +1,6 @@
 package com.example.javaagentmvp.web;
 
-import com.example.javaagentmvp.auth.AuthInterceptor;
+import com.example.javaagentmvp.auth.AuthRequestSupport;
 import com.example.javaagentmvp.auth.AuthenticatedUser;
 import com.example.javaagentmvp.auth.GuestQuotaService;
 import com.example.javaagentmvp.auth.WechatAuthService;
@@ -136,11 +136,7 @@ public class WechatAuthController {
     }
 
     private AuthenticatedUser requireUser(HttpServletRequest request) {
-        AuthenticatedUser authUser = (AuthenticatedUser) request.getAttribute(AuthInterceptor.AUTH_USER_ATTR);
-        if (authUser == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "unauthorized");
-        }
-        return authUser;
+        return AuthRequestSupport.requireUser(request);
     }
 
     private UserDto toUserDto(WechatUserRecord user) {

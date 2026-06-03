@@ -69,11 +69,12 @@ public class CliChatRunner implements CommandLineRunner {
                         .call()
                         .content();
                 System.out.println("\n🤖 " + response + "\n");
-                conversationRepository.touchUpdatedAt(conversationId.get(), Instant.now());
+                conversationRepository.touchUpdatedAt(conversationId.get(), Instant.now(), null);
                 conversationRepository.updateTitleIfDefault(
                         conversationId.get(),
                         trimTitle(input),
-                        Instant.now());
+                        Instant.now(),
+                        null);
             }
             catch (Exception e) {
                 String message = e.getMessage();

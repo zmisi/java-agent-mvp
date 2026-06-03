@@ -11,15 +11,22 @@ import java.nio.file.Path;
 public class AuthWebMvcConfig implements WebMvcConfigurer {
 
     private final AuthInterceptor authInterceptor;
+    private final WechatLoginRateLimitInterceptor loginRateLimitInterceptor;
     private final WechatAuthProperties wechatAuthProperties;
 
-    public AuthWebMvcConfig(AuthInterceptor authInterceptor, WechatAuthProperties wechatAuthProperties) {
+    public AuthWebMvcConfig(
+            AuthInterceptor authInterceptor,
+            WechatLoginRateLimitInterceptor loginRateLimitInterceptor,
+            WechatAuthProperties wechatAuthProperties) {
         this.authInterceptor = authInterceptor;
+        this.loginRateLimitInterceptor = loginRateLimitInterceptor;
         this.wechatAuthProperties = wechatAuthProperties;
     }
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
+        registry.addInterceptor(loginRateLimitInterceptor)
+                .addPathPatterns("/api/auth/wechat/login");
         registry.addInterceptor(authInterceptor)
                 .addPathPatterns("/api/**")
                 .excludePathPatterns("/api/auth/wechat/login");

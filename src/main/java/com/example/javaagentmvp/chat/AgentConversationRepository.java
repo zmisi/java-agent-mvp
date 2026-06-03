@@ -19,40 +19,55 @@ public class AgentConversationRepository {
         this.conversationMapper = conversationMapper;
     }
 
-    public void insert(String id, String title, Instant now) {
-        conversationMapper.insert(new ConversationRecord(id, title, now, now));
+    public void insert(String id, String title, Instant now, long userId) {
+        conversationMapper.insert(new ConversationRecord(id, title, now, now, userId));
     }
 
     public void insertIfMissing(String id, String title, Instant now) {
-        conversationMapper.insertIfMissing(new ConversationRecord(id, title, now, now));
+        conversationMapper.insertIfMissing(new ConversationRecord(id, title, now, now, null));
     }
 
     public boolean exists(String id) {
         return conversationMapper.countById(id) > 0;
     }
 
-    public void touchUpdatedAt(String id, Instant now) {
-        conversationMapper.touchUpdatedAt(id, now);
+    public boolean existsForUser(String id, long userId, boolean adminBypass) {
+        if (adminBypass) {
+            return exists(id);
+        }
+        return conversationMapper.countByIdAndUserId(id, userId) > 0;
     }
 
-    public void updateTitleIfDefault(String id, String newTitle, Instant now) {
-        conversationMapper.updateTitleIfDefault(id, newTitle, now);
+    public void touchUpdatedAt(String id, Instant now, Long ownerUserId) {
+        UserScope scope = UserScope.from(ownerUserId);
+        conversationMapper.touchUpdatedAt(id, now, scope.scopeByUser(), scope.userId());
     }
 
-    public void updateTitle(String id, String newTitle, Instant now) {
-        conversationMapper.updateTitle(id, newTitle, now);
+    public void updateTitleIfDefault(String id, String newTitle, Instant now, Long ownerUserId) {
+        UserScope scope = UserScope.from(ownerUserId);
+        conversationMapper.updateTitleIfDefault(id, newTitle, now, scope.scopeByUser(), scope.userId());
     }
 
-    public void archive(String id, Instant archivedAt) {
-        conversationMapper.archiveById(id, archivedAt);
+    public void updateTitle(String id, String newTitle, Instant now, Long ownerUserId) {
+        UserScope scope = UserScope.from(ownerUserId);
+        conversationMapper.updateTitle(id, newTitle, now, scope.scopeByUser(), scope.userId());
     }
 
-    public void delete(String id) {
-        conversationMapper.deleteById(id);
+    public void archive(String id, Instant archivedAt, Long ownerUserId) {
+        UserScope scope = UserScope.from(ownerUserId);
+        conversationMapper.archiveById(id, archivedAt, scope.scopeByUser(), scope.userId());
     }
 
-    public List<ConversationSummary> listSummaries() {
-        return conversationMapper.listSummaries().stream()
+    public void delete(String id, Long ownerUserId) {
+        UserScope scope = UserScope.from(ownerUserId);
+        conversationMapper.deleteById(id, scope.scopeByUser(), scope.userId());
+    }
+
+    public List<ConversationSummary> listSummaries(long userId, boolean adminBypass) {
+        List<ConversationSummaryRow> rows = adminBypass
+                ? conversationMapper.listSummaries()
+                : conversationMapper.listSummariesByUserId(userId);
+        return rows.stream()
                 .map(AgentConversationRepository::toSummary)
                 .toList();
     }
@@ -67,6 +82,16 @@ public class AgentConversationRepository {
 
     private static ConversationSummary toSummary(ConversationSummaryRow row) {
         return new ConversationSummary(row.getId(), row.getTitle(), row.getCreatedAt(), row.getUpdatedAt());
+    }
+
+    /** null ownerUserId = admin / CLI: no user_id filter in SQL. */
+    private record UserScope(boolean scopeByUser, long userId) {
+        static UserScope from(Long ownerUserId) {
+            if (ownerUserId == null) {
+                return new UserScope(false, 0L);
+            }
+            return new UserScope(true, ownerUserId);
+        }
     }
 
     public record ConversationSummary(String id, String title, String createdAt, String updatedAt) {

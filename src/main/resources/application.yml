@@ -10,6 +10,8 @@ app:
     # 访客使用限制：仅统计授权登录次数（guest-login-limit）
     guest-quota-limit: 10
     guest-login-limit: 10
+    # 同一 IP 每分钟最多调用微信登录接口次数
+    login-rate-limit-per-minute: 30
     avatar-upload-dir: ${WECHAT_AVATAR_UPLOAD_DIR:./data/wechat-avatars}
     # 逗号分隔多个 openid，例如: oAbc123,oDef456
     bootstrap-admin-openids: ${WECHAT_BOOTSTRAP_ADMIN_OPENIDS:}

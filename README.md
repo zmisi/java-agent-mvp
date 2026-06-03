@@ -48,6 +48,18 @@ cp .env.example .env
 
 常用对应关系：`docker compose` → `./scripts/podman-compose.sh`，例如 `./scripts/podman-compose.sh exec postgres psql -U agent -d employees`。
 
+## 微信小程序 API 安全
+
+推荐链路（已实现）：
+
+1. 小程序 `wx.login()` 取得 `code`，仅服务端调用微信 `jscode2session` 换 `openid`（不信任客户端身份）。
+2. 服务端签发 **JWT（HS256）+ 服务端会话**（`auth_session`），小程序后续请求带 `Authorization: Bearer <token>`。
+3. **路径级 RBAC**：`guest` / `member` 仅可访问 `/api/auth/*`、`/api/conversations/*`、`/api/admission/*`；发布、运维、设计文档等管理接口需 `admin`。
+4. **会话归属**：`conversation.user_id` 绑定微信用户，禁止跨用户读写会话。
+5. **登录限流**、**JWT jti 与会话绑定**、**启动时校验** `WECHAT_JWT_SECRET` 长度（配置 `WECHAT_APP_ID` 时）。
+
+小程序端请勿把 token 写入日志；生产环境务必 HTTPS，并轮换 `WECHAT_JWT_SECRET`。
+
 **不要**设置 `PODMAN_COMPOSE_PROVIDER=podman`（会把 `compose up` 变成错误的 `podman up`，报 `unknown flag: --build`）。裸命令 `podman compose` 也可能走有问题的外部 provider；请用 `./scripts/podman-compose.sh`。
 
 **`docker-credential-desktop: executable file not found`**：执行 `./scripts/fix-podman-env.sh` 去掉 `~/.docker/config.json` 里的 `"credsStore": "desktop"`，再用 `./scripts/podman-compose.sh`。

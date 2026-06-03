@@ -28,9 +28,12 @@ public class AuthSessionService {
         return new SessionCreated(sessionId, jti, expiresAt);
     }
 
-    public void validateAndTouch(String sessionId) {
+    public void validateAndTouch(String sessionId, String jti) {
         AuthSessionRecord session = authSessionMapper.findById(sessionId);
         if (session == null || session.revokedAt() != null) {
+            throw new AuthException("SESSION_REVOKED", "会话已失效，请重新登录", org.springframework.http.HttpStatus.UNAUTHORIZED);
+        }
+        if (jti == null || !jti.equals(session.jwtJti())) {
             throw new AuthException("SESSION_REVOKED", "会话已失效，请重新登录", org.springframework.http.HttpStatus.UNAUTHORIZED);
         }
         Instant now = Instant.now();
