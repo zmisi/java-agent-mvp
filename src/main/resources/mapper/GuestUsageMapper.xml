@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.javaagentmvp.auth.persistence.mapper.GuestUsageMapper">
+
+    <insert id="insertIfMissing">
+        INSERT INTO agent_ui.guest_usage (user_id, used_count, quota_limit, login_count, login_limit)
+        VALUES (#{userId}, 0, #{quotaLimit}, 0, #{loginLimit})
+        ON CONFLICT (user_id) DO NOTHING
+    </insert>
+
+    <select id="findByUserId" resultType="com.example.javaagentmvp.auth.persistence.model.GuestUsageRecord">
+        SELECT user_id,
+               used_count,
+               quota_limit,
+               login_count,
+               login_limit,
+               updated_at
+        FROM agent_ui.guest_usage
+        WHERE user_id = #{userId}
+    </select>
+
+    <update id="incrementUsedCount">
+        UPDATE agent_ui.guest_usage
+        SET used_count = used_count + 1,
+            updated_at = now()
+        WHERE user_id = #{userId}
+    </update>
+
+    <update id="incrementLoginCount">
+        UPDATE agent_ui.guest_usage
+        SET login_count = login_count + 1,
+            updated_at = now()
+        WHERE user_id = #{userId}
+    </update>
+
+    <insert id="insertEvent">
+        INSERT INTO agent_ui.guest_usage_event (user_id, action)
+        VALUES (#{userId}, #{action})
+    </insert>
+
+    <update id="resetGuestLimits">
+        UPDATE agent_ui.guest_usage
+        SET used_count = 0,
+            login_count = 0,
+            updated_at = now()
+        WHERE user_id = #{userId}
+    </update>
+
+</mapper>

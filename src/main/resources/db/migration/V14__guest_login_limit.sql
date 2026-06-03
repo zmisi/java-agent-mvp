@@ -1,0 +1,3 @@
+ALTER TABLE agent_ui.guest_usage
+    ADD COLUMN login_count INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN login_limit INTEGER NOT NULL DEFAULT 10;

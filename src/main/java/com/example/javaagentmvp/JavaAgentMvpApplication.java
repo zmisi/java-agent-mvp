@@ -9,12 +9,14 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 @EnableConfigurationProperties({
         ChatMemoryProperties.class,
         com.example.javaagentmvp.chat.context.ChatContextWindowProperties.class,
-        com.example.javaagentmvp.dbagent.DbAgentProperties.class
+        com.example.javaagentmvp.dbagent.DbAgentProperties.class,
+        com.example.javaagentmvp.auth.WechatAuthProperties.class
 })
 @MapperScan({
         "com.example.javaagentmvp.chat.persistence.mapper",
         "com.example.javaagentmvp.dbagent.persistence.mapper",
-        "com.example.javaagentmvp.dbagent.provisioning.persistence.mapper"
+        "com.example.javaagentmvp.dbagent.provisioning.persistence.mapper",
+        "com.example.javaagentmvp.auth.persistence.mapper"
 })
 public class JavaAgentMvpApplication {
 

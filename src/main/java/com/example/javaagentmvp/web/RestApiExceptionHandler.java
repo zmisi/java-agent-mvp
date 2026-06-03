@@ -2,6 +2,7 @@ package com.example.javaagentmvp.web;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.example.javaagentmvp.auth.AuthException;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -23,6 +24,24 @@ public class RestApiExceptionHandler {
         body.put("error", "provisioning_error");
         body.put("message", ex.getMessage());
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(body);
+    }
+
+    @ExceptionHandler(AuthException.class)
+    public ResponseEntity<Map<String, Object>> handleAuth(AuthException ex) {
+        log.warn("Auth failed: {} {}", ex.errorCode(), ex.getMessage());
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("error", ex.errorCode());
+        body.put("message", ex.getMessage());
+        return ResponseEntity.status(ex.status()).body(body);
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, Object>> handleIllegalArgument(IllegalArgumentException ex) {
+        log.warn("Bad request: {}", ex.getMessage());
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("error", "bad_request");
+        body.put("message", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
     }
 
     @ExceptionHandler(DataAccessException.class)

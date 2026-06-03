@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.javaagentmvp.auth.persistence.mapper.WechatLoginAuditMapper">
+
+    <insert id="insert">
+        INSERT INTO agent_ui.wechat_login_audit (
+            openid, login_status, failure_reason, ip, user_agent, request_id
+        )
+        VALUES (
+            #{openid}, #{loginStatus}, #{failureReason}, #{ip}, #{userAgent}, #{requestId}
+        )
+    </insert>
+
+    <select id="listRecent" resultType="com.example.javaagentmvp.auth.persistence.model.WechatLoginAuditRow">
+        SELECT id,
+               openid,
+               login_status,
+               failure_reason,
+               ip,
+               user_agent,
+               request_id,
+               created_at
+        FROM agent_ui.wechat_login_audit
+        ORDER BY created_at DESC
+        LIMIT #{limit}
+    </select>
+
+</mapper>

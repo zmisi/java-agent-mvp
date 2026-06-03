@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.javaagentmvp.auth.persistence.mapper.WechatUserMapper">
+
+    <insert id="upsert">
+        INSERT INTO agent_ui.wechat_user (
+            openid, unionid, nickname, avatar_url, province, city, gender, role, status, updated_at
+        )
+        VALUES (
+            #{openid}, #{unionid}, #{nickname}, #{avatarUrl}, #{province}, #{city}, #{gender},
+            COALESCE(#{role}, 'guest'), COALESCE(#{status}, 'active'), now()
+        )
+        ON CONFLICT (openid) DO UPDATE SET
+            unionid = excluded.unionid,
+            province = COALESCE(excluded.province, agent_ui.wechat_user.province),
+            city = COALESCE(excluded.city, agent_ui.wechat_user.city),
+            gender = COALESCE(excluded.gender, agent_ui.wechat_user.gender),
+            updated_at = now()
+    </insert>
+
+    <select id="findByOpenid" resultType="com.example.javaagentmvp.auth.persistence.model.WechatUserRecord">
+        SELECT id,
+               openid,
+               unionid,
+               nickname,
+               avatar_url,
+               province,
+               city,
+               gender,
+               role,
+               status,
+               created_at,
+               updated_at
+        FROM agent_ui.wechat_user
+        WHERE openid = #{openid}
+    </select>
+
+    <select id="findById" resultType="com.example.javaagentmvp.auth.persistence.model.WechatUserRecord">
+        SELECT id,
+               openid,
+               unionid,
+               nickname,
+               avatar_url,
+               province,
+               city,
+               gender,
+               role,
+               status,
+               created_at,
+               updated_at
+        FROM agent_ui.wechat_user
+        WHERE id = #{id}
+    </select>
+
+    <select id="listAll" resultType="com.example.javaagentmvp.auth.persistence.model.WechatUserRecord">
+        SELECT id,
+               openid,
+               unionid,
+               nickname,
+               avatar_url,
+               province,
+               city,
+               gender,
+               role,
+               status,
+               created_at,
+               updated_at
+        FROM agent_ui.wechat_user
+        ORDER BY updated_at DESC
+        LIMIT 500
+    </select>
+
+    <update id="updateRoleAndStatus">
+        UPDATE agent_ui.wechat_user
+        SET role = #{role},
+            status = #{status},
+            updated_at = now()
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateAvatarUrl">
+        UPDATE agent_ui.wechat_user
+        SET avatar_url = #{avatarUrl},
+            updated_at = now()
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateNickname">
+        UPDATE agent_ui.wechat_user
+        SET nickname = #{nickname},
+            updated_at = now()
+        WHERE id = #{id}
+    </update>
+
+</mapper>

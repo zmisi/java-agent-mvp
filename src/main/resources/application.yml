@@ -1,4 +1,18 @@
 app:
+  wechat:
+    app-id: ${WECHAT_APP_ID:}
+    app-secret: ${WECHAT_APP_SECRET:}
+    jwt-secret: ${WECHAT_JWT_SECRET:replace-this-with-env-secret}
+    jwt-issuer: wechat-mini-program
+    token-ttl-seconds: 86400
+    session-idle-seconds: 3600
+    session-max-seconds: 86400
+    # 访客使用限制：仅统计授权登录次数（guest-login-limit）
+    guest-quota-limit: 10
+    guest-login-limit: 10
+    avatar-upload-dir: ${WECHAT_AVATAR_UPLOAD_DIR:./data/wechat-avatars}
+    # 逗号分隔多个 openid，例如: oAbc123,oDef456
+    bootstrap-admin-openids: ${WECHAT_BOOTSTRAP_ADMIN_OPENIDS:}
   db-agent:
     design-docs-path: file:./docs/design
     releases-path: file:./db/releases
@@ -126,6 +140,8 @@ app:
 
 logging:
   level:
+    com.example.javaagentmvp.web.ApiAccessLogFilter: INFO
+    com.example.javaagentmvp.web.AdmissionController: INFO
     org.flywaydb: INFO
     com.example.javaagentmvp.rag: INFO
     com.example.javaagentmvp.rag.RagFlowLoggingAdvisor: INFO
