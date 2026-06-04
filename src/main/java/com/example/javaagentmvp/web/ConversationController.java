@@ -6,6 +6,7 @@ import com.example.javaagentmvp.auth.UserRole;
 import com.example.javaagentmvp.chat.AgentConversationRepository;
 import com.example.javaagentmvp.chat.ConversationAccessService;
 import com.example.javaagentmvp.chat.PostgresChatMemory;
+import com.example.javaagentmvp.chat.ui.ChatTable;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -60,7 +61,7 @@ public class ConversationController {
         AuthenticatedUser user = AuthRequestSupport.requireUser(request);
         conversationAccess.requireAccess(conversationId, user);
         return postgresChatMemory.listTranscript(conversationId).stream()
-                .map(row -> new MessageDto(row.id(), row.createdAt(), row.role(), row.text()))
+                .map(row -> new MessageDto(row.id(), row.createdAt(), row.role(), row.text(), row.tables()))
                 .toList();
     }
 
@@ -107,7 +108,7 @@ public class ConversationController {
     public record ConversationCreatedDto(String id, String title, String createdAt, String updatedAt) {
     }
 
-    public record MessageDto(long id, String createdAt, String role, String text) {
+    public record MessageDto(long id, String createdAt, String role, String text, List<ChatTable> tables) {
     }
 
     public record RenameConversationDto(String title) {

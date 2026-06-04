@@ -47,6 +47,10 @@ public class RagQueryRouter {
             return Decision.skip("structured query — use MCP tools (SQL or getMajorByScore)");
         }
 
+        if (isScoreMajorAdmissionQuery(normalized)) {
+            return Decision.skip("score/major admission query — use MCP getMajorByScore");
+        }
+
         if (isScoreQueryFollowUp(normalized, priorUserMessages, priorContextHints)) {
             return Decision.skip("score query follow-up — use MCP getMajorByScore");
         }
@@ -95,10 +99,35 @@ public class RagQueryRouter {
 
     private static boolean isScoreMajorQuery(String message) {
         String normalized = message.strip();
-        if (!SCORE_PATTERN.matcher(normalized).find()) {
+        if (!containsAdmissionScore(normalized)) {
             return false;
         }
         return MAJOR_QUERY_HINT.matcher(normalized).find();
+    }
+
+    /** e.g. 安徽 2025 物理 普通批 630 可以报考什么专业？ (score without 分 suffix) */
+    private static boolean isScoreMajorAdmissionQuery(String message) {
+        if (!containsAdmissionScore(message)) {
+            return false;
+        }
+        if (MAJOR_QUERY_HINT.matcher(message).find()) {
+            return true;
+        }
+        if (ADMISSION_PARAMS.matcher(message).find() || SUBJECT_TRACK.matcher(message).find()) {
+            return PROVINCE_PATTERN.matcher(message).find() || YEAR_PATTERN.matcher(message).find();
+        }
+        return false;
+    }
+
+    private static boolean containsAdmissionScore(String message) {
+        java.util.regex.Matcher matcher = SCORE_NUMBER.matcher(message);
+        while (matcher.find()) {
+            int score = Integer.parseInt(matcher.group(1));
+            if (score >= 300 && score <= 750) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean assistantAskingForScoreParams(String text) {
@@ -114,11 +143,12 @@ public class RagQueryRouter {
                 || (hasProvince && normalized.length() <= 40);
     }
 
-    private static final Pattern SCORE_PATTERN = Pattern.compile("\\d{3,4}\\s*分");
+    private static final Pattern SCORE_NUMBER = Pattern.compile("(?<!\\d)(\\d{3,4})(?!\\d)(?!\\.\\d)");
     private static final Pattern MAJOR_QUERY_HINT = Pattern.compile(
             "专业|报考|报志愿|志愿|可报|能上|录取|哪些|什么专业|报什么|什么学校|哪些学校|院校");
     private static final Pattern ADMISSION_PARAMS = Pattern.compile(
             "物理类|历史类|普通批|国家专项|地方专项|中外合作");
+    private static final Pattern SUBJECT_TRACK = Pattern.compile("物理(类|方向)?|历史(类|方向)?");
     private static final Pattern ASSISTANT_ASKING_PARAMS = Pattern.compile(
             "省份|科类|物理类|历史类|所在省|提供.*省|getMajorByScore");
     private static final Pattern YEAR_PATTERN = Pattern.compile("\\b20\\d{2}\\b");

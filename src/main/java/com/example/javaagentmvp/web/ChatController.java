@@ -6,11 +6,15 @@ import com.example.javaagentmvp.auth.AuthenticatedUser;
 import com.example.javaagentmvp.auth.UserRole;
 import com.example.javaagentmvp.chat.AgentConversationRepository;
 import com.example.javaagentmvp.chat.ConversationAccessService;
+import com.example.javaagentmvp.chat.PostgresChatMemory;
+import com.example.javaagentmvp.chat.ui.TranscriptBuilder;
 import com.example.javaagentmvp.chat.context.ChatContextUsageRegistry;
 import jakarta.servlet.http.HttpServletRequest;
 import com.example.javaagentmvp.chat.context.ContextUsageResponse;
 import com.example.javaagentmvp.chat.context.ConversationCompactionService;
 import com.example.javaagentmvp.chat.context.ConversationTurnSummaryBuffer;
+import com.example.javaagentmvp.chat.ui.ChatTable;
+import com.example.javaagentmvp.chat.ui.McpTableContext;
 import com.example.javaagentmvp.rag.RagFlowContext;
 import com.example.javaagentmvp.rag.RagSource;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -44,6 +48,8 @@ public class ChatController {
     private final ConversationTurnSummaryBuffer turnSummaryBuffer;
     private final ConversationAccessService conversationAccess;
 
+    private final PostgresChatMemory postgresChatMemory;
+
     private final String activeProvider;
 
     public ChatController(
@@ -54,6 +60,7 @@ public class ChatController {
             ConversationCompactionService conversationCompactionService,
             ConversationTurnSummaryBuffer turnSummaryBuffer,
             ConversationAccessService conversationAccess,
+            PostgresChatMemory postgresChatMemory,
             @Value("${app.llm.provider:local}") String activeProvider) {
         this.chatClient = chatClient;
         this.qwenApiLoggingAdvisor = qwenApiLoggingAdvisor;
@@ -62,6 +69,7 @@ public class ChatController {
         this.conversationCompactionService = conversationCompactionService;
         this.turnSummaryBuffer = turnSummaryBuffer;
         this.conversationAccess = conversationAccess;
+        this.postgresChatMemory = postgresChatMemory;
         this.activeProvider = activeProvider.strip().toLowerCase();
     }
 
@@ -91,7 +99,11 @@ public class ChatController {
             ContextUsageResponse contextUsage = chatContextUsageRegistry.consume();
             turnSummaryBuffer.appendTurn(conversationId, message, reply);
             touchConversation(conversationId, message, user);
-            return new ChatReplyDto(reply, RagFlowContext.sources(), contextUsage);
+            List<ChatTable> tables = resolveReplyTables(conversationId);
+            if (!tables.isEmpty()) {
+                postgresChatMemory.attachUiTablesToLatestAssistant(conversationId, tables);
+            }
+            return new ChatReplyDto(reply, RagFlowContext.sources(), tables, contextUsage);
         }
         catch (RuntimeException ex) {
             chatContextUsageRegistry.consume();
@@ -99,6 +111,7 @@ public class ChatController {
         }
         finally {
             RagFlowContext.clear();
+            McpTableContext.clear();
         }
     }
 
@@ -156,6 +169,21 @@ public class ChatController {
                 result.afterEstimatedTokens());
     }
 
+    private List<ChatTable> resolveReplyTables(String conversationId) {
+        List<ChatTable> tables = McpTableContext.tables();
+        if (!tables.isEmpty()) {
+            return tables;
+        }
+        List<TranscriptBuilder.TranscriptRow> transcript = postgresChatMemory.listTranscript(conversationId);
+        for (int i = transcript.size() - 1; i >= 0; i--) {
+            TranscriptBuilder.TranscriptRow row = transcript.get(i);
+            if ("assistant".equals(row.role()) && row.tables() != null && !row.tables().isEmpty()) {
+                return row.tables();
+            }
+        }
+        return List.of();
+    }
+
     private void touchConversation(String conversationId, String message, AuthenticatedUser user) {
         Instant now = Instant.now();
         Long ownerScope = ownerScope(user);
@@ -194,7 +222,11 @@ public class ChatController {
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    public record ChatReplyDto(String assistant, List<RagSource> sources, ContextUsageResponse contextUsage) {
+    public record ChatReplyDto(
+            String assistant,
+            List<RagSource> sources,
+            List<ChatTable> tables,
+            ContextUsageResponse contextUsage) {
     }
 
     public record CompactReplyDto(

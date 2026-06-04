@@ -2,8 +2,10 @@ package com.example.javaagentmvp.chat;
 
 import com.example.javaagentmvp.ChatMemoryProperties;
 import com.example.javaagentmvp.LoggingToolCallback;
+import com.example.javaagentmvp.McpTableCapturingToolCallback;
 import com.example.javaagentmvp.QwenApiLoggingAdvisor;
 import com.example.javaagentmvp.dbagent.DbAgentTargetRegistry;
+import com.example.javaagentmvp.chat.ui.McpTableExtractor;
 import com.example.javaagentmvp.rag.AdmissionsAnswerFormatAdvisor;
 import com.example.javaagentmvp.rag.ConditionalQuestionAnswerAdvisor;
 import com.example.javaagentmvp.rag.RagFlowLoggingAdvisor;
@@ -39,10 +41,12 @@ public class ChatClientConfiguration {
     PostgresChatMemory postgresChatMemory(
             ChatMemoryMessageMapper chatMemoryMessageMapper,
             ObjectMapper objectMapper,
+            McpTableExtractor mcpTableExtractor,
             ChatMemoryProperties chatMemoryProperties) {
         return new PostgresChatMemory(
                 chatMemoryMessageMapper,
                 objectMapper,
+                mcpTableExtractor,
                 chatMemoryProperties.maxMessages());
     }
 
@@ -70,9 +74,12 @@ public class ChatClientConfiguration {
             ObjectProvider<AdmissionsAnswerFormatAdvisor> admissionsAnswerFormatAdvisor,
             ObjectProvider<ConditionalQuestionAnswerAdvisor> conditionalQuestionAnswerAdvisor,
             ObjectProvider<RagFlowLoggingAdvisor> ragFlowLoggingAdvisor,
-            ChatContextUsageAdvisor chatContextUsageAdvisor) {
-        List<ToolCallback> toolCallbacks = LoggingToolCallback.wrapAll(
-                SyncMcpToolCallbackProvider.syncToolCallbacks(dbAgentTargetRegistry.chatMcpClients()));
+            ChatContextUsageAdvisor chatContextUsageAdvisor,
+            McpTableExtractor mcpTableExtractor) {
+        List<ToolCallback> toolCallbacks = McpTableCapturingToolCallback.wrapAll(
+                LoggingToolCallback.wrapAll(
+                        SyncMcpToolCallbackProvider.syncToolCallbacks(dbAgentTargetRegistry.chatMcpClients())),
+                mcpTableExtractor);
 
         var builder = chatClientBuilder
                 .defaultSystem(buildSystemPrompt(agentSystemPrompt, ragProperties))

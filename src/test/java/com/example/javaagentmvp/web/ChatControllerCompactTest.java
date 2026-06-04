@@ -6,6 +6,7 @@ import com.example.javaagentmvp.auth.AuthenticatedUser;
 import com.example.javaagentmvp.auth.UserRole;
 import com.example.javaagentmvp.chat.AgentConversationRepository;
 import com.example.javaagentmvp.chat.ConversationAccessService;
+import com.example.javaagentmvp.chat.PostgresChatMemory;
 import com.example.javaagentmvp.chat.context.ChatContextUsageRegistry;
 import com.example.javaagentmvp.chat.context.ConversationCompactionService;
 import com.example.javaagentmvp.chat.context.ConversationTurnSummaryBuffer;
@@ -118,6 +119,7 @@ class ChatControllerCompactTest {
                 compactionService,
                 mock(ConversationTurnSummaryBuffer.class),
                 conversationAccess,
+                mock(PostgresChatMemory.class),
                 "local");
     }
 

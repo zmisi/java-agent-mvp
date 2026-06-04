@@ -26,6 +26,12 @@
         WHERE conversation_id = #{conversationId}
     </delete>
 
+    <update id="updatePayloadById">
+        UPDATE agent_ui.chat_memory_message
+        SET payload = CAST(#{payloadJson} AS jsonb)
+        WHERE id = #{id}
+    </update>
+
     <select id="selectTranscriptByConversationId"
             resultType="com.example.javaagentmvp.chat.persistence.model.ChatMemoryMessageRow">
         SELECT id,

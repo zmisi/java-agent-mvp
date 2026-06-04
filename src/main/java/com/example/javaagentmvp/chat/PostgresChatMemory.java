@@ -2,9 +2,14 @@ package com.example.javaagentmvp.chat;
 
 import com.example.javaagentmvp.chat.persistence.mapper.ChatMemoryMessageMapper;
 import com.example.javaagentmvp.chat.persistence.model.ChatMemoryMessageRow;
+import com.example.javaagentmvp.chat.ui.ChatTable;
+import com.example.javaagentmvp.chat.ui.McpTableExtractor;
+import com.example.javaagentmvp.chat.ui.TranscriptBuilder;
+import com.example.javaagentmvp.chat.ui.UiTableCodec;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.messages.Message;
 
@@ -21,14 +26,18 @@ public final class PostgresChatMemory implements ChatMemory {
 
     private final ObjectMapper objectMapper;
 
+    private final TranscriptBuilder transcriptBuilder;
+
     private final int maxMessages;
 
     public PostgresChatMemory(
             ChatMemoryMessageMapper chatMemoryMessageMapper,
             ObjectMapper objectMapper,
+            McpTableExtractor mcpTableExtractor,
             int maxMessages) {
         this.chatMemoryMessageMapper = chatMemoryMessageMapper;
         this.objectMapper = objectMapper;
+        this.transcriptBuilder = new TranscriptBuilder(mcpTableExtractor, objectMapper);
         this.maxMessages = maxMessages;
     }
 
@@ -64,26 +73,34 @@ public final class PostgresChatMemory implements ChatMemory {
         chatMemoryMessageMapper.deleteByConversationId(conversationId);
     }
 
-    public List<TranscriptRow> listTranscript(String conversationId) {
-        return chatMemoryMessageMapper.selectTranscriptByConversationId(conversationId).stream()
-                .map(this::toTranscriptRow)
-                .toList();
+    public List<TranscriptBuilder.TranscriptRow> listTranscript(String conversationId) {
+        List<ChatMemoryMessageRow> rows = chatMemoryMessageMapper.selectTranscriptByConversationId(conversationId);
+        return transcriptBuilder.build(rows);
     }
 
-    private TranscriptRow toTranscriptRow(ChatMemoryMessageRow row) {
-        try {
-            JsonNode node = objectMapper.readTree(row.getPayloadJson());
-            return new TranscriptRow(
-                    row.getId(),
-                    row.getCreatedAt(),
-                    MessagePayloadCodec.displayRole(node),
-                    MessagePayloadCodec.toDisplayText(node));
+    public void attachUiTablesToLatestAssistant(String conversationId, List<ChatTable> tables) {
+        if (tables == null || tables.isEmpty()) {
+            return;
         }
-        catch (JsonProcessingException ex) {
-            throw new IllegalStateException(ex);
+        List<ChatMemoryMessageRow> rows = chatMemoryMessageMapper.selectTranscriptByConversationId(conversationId);
+        for (int i = rows.size() - 1; i >= 0; i--) {
+            ChatMemoryMessageRow row = rows.get(i);
+            try {
+                JsonNode node = objectMapper.readTree(row.getPayloadJson());
+                if (!"assistant".equals(MessagePayloadCodec.displayRole(node))) {
+                    continue;
+                }
+                if (TranscriptBuilder.hasToolCalls(node)) {
+                    continue;
+                }
+                ObjectNode updated = ((ObjectNode) node).deepCopy();
+                updated.set("uiTables", objectMapper.valueToTree(tables));
+                chatMemoryMessageMapper.updatePayloadById(row.getId(), objectMapper.writeValueAsString(updated));
+                return;
+            }
+            catch (JsonProcessingException ex) {
+                throw new IllegalStateException("Failed to attach uiTables for conversation " + conversationId, ex);
+            }
         }
-    }
-
-    public record TranscriptRow(long id, String createdAt, String role, String text) {
     }
 }

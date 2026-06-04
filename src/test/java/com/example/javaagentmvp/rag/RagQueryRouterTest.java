@@ -76,6 +76,13 @@ class RagQueryRouterTest {
     }
 
     @Test
+    void skipsRagForScoreWithoutFenSuffix() {
+        RagQueryRouter.Decision decision = router.decide("安徽 2025 物理 普通批 630 可以报考什么专业？");
+        assertFalse(decision.useRag());
+        assertFalse(decision.shouldRetrieve());
+    }
+
+    @Test
     void skipsRagForScoreMajorQueries() {
         RagQueryRouter.Decision decision = router.decide("安徽考生630分可以报考合工大什么专业");
         assertFalse(decision.useRag());

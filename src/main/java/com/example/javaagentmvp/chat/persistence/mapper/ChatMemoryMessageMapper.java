@@ -17,5 +17,7 @@ public interface ChatMemoryMessageMapper {
 
     int deleteByConversationId(@Param("conversationId") String conversationId);
 
+    int updatePayloadById(@Param("id") long id, @Param("payloadJson") String payloadJson);
+
     List<ChatMemoryMessageRow> selectTranscriptByConversationId(@Param("conversationId") String conversationId);
 }
