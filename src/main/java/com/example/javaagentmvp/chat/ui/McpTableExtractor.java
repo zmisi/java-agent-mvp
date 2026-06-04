@@ -31,12 +31,16 @@ public class McpTableExtractor {
     }
 
     public Optional<ChatTable> extract(String toolName, String toolInput, String responseData) {
+        return extract(toolName, toolInput, responseData, null);
+    }
+
+    public Optional<ChatTable> extract(String toolName, String toolInput, String responseData, String tierLabel) {
         if (responseData == null || responseData.isBlank()) {
             return Optional.empty();
         }
         String payload = unwrapToolPayload(responseData);
         if (matchesTool(toolName, "getMajorByScore") || hasMajorByScorePayload(payload)) {
-            return extractMajorByScore(toolInput, payload);
+            return extractMajorByScore(toolInput, payload, tierLabel);
         }
         return Optional.empty();
     }
@@ -108,7 +112,7 @@ public class McpTableExtractor {
         return tables;
     }
 
-    private Optional<ChatTable> extractMajorByScore(String toolInput, String responseData) {
+    private Optional<ChatTable> extractMajorByScore(String toolInput, String responseData, String tierLabel) {
         JsonNode root;
         try {
             root = objectMapper.readTree(responseData);
@@ -117,7 +121,10 @@ public class McpTableExtractor {
             return Optional.empty();
         }
         JsonNode majorsNode = root.get("majors");
-        if (majorsNode == null || !majorsNode.isArray() || majorsNode.isEmpty()) {
+        if (majorsNode == null || !majorsNode.isArray()) {
+            return Optional.empty();
+        }
+        if (majorsNode.isEmpty() && tierLabel == null) {
             return Optional.empty();
         }
 
@@ -130,10 +137,10 @@ public class McpTableExtractor {
             rows.add(row);
         }
 
-        return Optional.of(new ChatTable(buildMajorByScoreTitle(toolInput), MAJOR_BY_SCORE_COLUMNS, rows));
+        return Optional.of(new ChatTable(buildMajorByScoreTitle(toolInput, tierLabel), MAJOR_BY_SCORE_COLUMNS, rows));
     }
 
-    private String buildMajorByScoreTitle(String toolInput) {
+    private String buildMajorByScoreTitle(String toolInput, String tierLabel) {
         JsonNode args = parseJson(toolInput);
         List<String> parts = new ArrayList<>();
         if (args.has("score")) {
@@ -151,10 +158,14 @@ public class McpTableExtractor {
         if (args.has("admission_type")) {
             parts.add(args.get("admission_type").asText(""));
         }
+        String detail = parts.isEmpty() ? "可报专业" : String.join(" · ", parts);
+        if (tierLabel != null && !tierLabel.isBlank()) {
+            return tierLabel + "（" + detail + "）";
+        }
         if (parts.isEmpty()) {
             return "可报专业";
         }
-        return "可报专业（" + String.join(" · ", parts) + "）";
+        return "可报专业（" + detail + "）";
     }
 
     private JsonNode parseJson(String raw) {

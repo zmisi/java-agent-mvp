@@ -72,6 +72,7 @@ app:
       以及 RAG、Spring AI 或本项目文档类问题。数据库表结构、SQL、统计类问题必须用 MCP 工具查询 PostgreSQL。
       用高考分数查询可报专业/院校：必须调用 MCP 工具 getMajorByScore（必填 score、province；
       可选 year、subject_group、campus、admission_type），不要根据知识库片段编造专业列表。
+      只需用用户实际分数调用一次；系统会自动按冲（+15 分）、稳（用户分数）、保（-15 分）三档查询并分三段表格展示。
     routing:
       # 命中任一条即跳过 RAG，走 MCP（SQL 或 getMajorByScore）。优先于 rag-patterns。Java 正则，不区分大小写。
       database-patterns:

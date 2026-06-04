@@ -75,11 +75,13 @@ public class ChatClientConfiguration {
             ObjectProvider<ConditionalQuestionAnswerAdvisor> conditionalQuestionAnswerAdvisor,
             ObjectProvider<RagFlowLoggingAdvisor> ragFlowLoggingAdvisor,
             ChatContextUsageAdvisor chatContextUsageAdvisor,
-            McpTableExtractor mcpTableExtractor) {
+            McpTableExtractor mcpTableExtractor,
+            ObjectMapper objectMapper) {
         List<ToolCallback> toolCallbacks = McpTableCapturingToolCallback.wrapAll(
                 LoggingToolCallback.wrapAll(
                         SyncMcpToolCallbackProvider.syncToolCallbacks(dbAgentTargetRegistry.chatMcpClients())),
-                mcpTableExtractor);
+                mcpTableExtractor,
+                objectMapper);
 
         var builder = chatClientBuilder
                 .defaultSystem(buildSystemPrompt(agentSystemPrompt, ragProperties))

@@ -14,6 +14,21 @@ class McpTableExtractorTest {
     private final McpTableExtractor extractor = new McpTableExtractor(new ObjectMapper());
 
     @Test
+    void extractMajorByScoreBuildsTierTitle() {
+        String toolInput = """
+                {"score":645,"province":"安徽","year":2025,"subject_group":"物理类","admission_type":"普通批"}
+                """;
+        String responseData = """
+                {"count":0,"majors":[]}
+                """;
+
+        ChatTable table = extractor.extract("getMajorByScore", toolInput, responseData, "冲").orElseThrow();
+
+        assertEquals("冲（645分 · 安徽 · 2025 · 物理类 · 普通批）", table.title());
+        assertTrue(table.rows().isEmpty());
+    }
+
+    @Test
     void extractMajorByScoreBuildsTableWithChineseColumns() {
         String toolInput = """
                 {"score":630,"province":"安徽","year":2025,"subject_group":"物理类","admission_type":"普通批"}
