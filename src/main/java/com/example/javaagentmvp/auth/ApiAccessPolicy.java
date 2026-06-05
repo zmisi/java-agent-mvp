@@ -9,13 +9,18 @@ package com.example.javaagentmvp.auth;
  */
 public final class ApiAccessPolicy {
 
-    private static final String LOGIN_PATH = "/api/auth/wechat/login";
+    private static final String MINI_PROGRAM_LOGIN_PATH = "/api/auth/wechat/login";
+    private static final String WEB_LOGIN_PATH = "/api/auth/web/login";
 
     private ApiAccessPolicy() {
     }
 
     public static boolean isPublicPath(String uri) {
-        return uri != null && LOGIN_PATH.equals(normalize(uri));
+        if (uri == null) {
+            return false;
+        }
+        String path = normalize(uri);
+        return MINI_PROGRAM_LOGIN_PATH.equals(path) || WEB_LOGIN_PATH.equals(path);
     }
 
     public static boolean isAllowed(UserRole role, String uri) {

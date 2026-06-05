@@ -315,6 +315,18 @@
   </div>
 </div>
 
+<div id="authOverlay" class="auth-overlay" hidden>
+  <div class="auth-panel">
+    <h2 class="auth-title">Web Console Login</h2>
+    <p class="auth-hint">Enter the WEB_LOGIN_SECRET configured on the server.</p>
+    <form id="authLoginForm" class="auth-form">
+      <input id="authSecretInput" type="password" class="auth-input" autocomplete="current-password" placeholder="Login secret" required/>
+      <button type="submit" class="btn btn-new auth-submit">Sign in</button>
+    </form>
+    <p id="authOverlayError" class="auth-error" hidden></p>
+  </div>
+</div>
+
 <script src="/app.js"></script>
 <script src="/releases.js"></script>
 <script src="/provisioning.js"></script>

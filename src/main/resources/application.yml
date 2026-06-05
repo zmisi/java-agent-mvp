@@ -2,6 +2,8 @@ app:
   wechat:
     app-id: ${WECHAT_APP_ID:}
     app-secret: ${WECHAT_APP_SECRET:}
+    web-login-secret: ${WEB_LOGIN_SECRET:}
+    web-login-openid: ${WEB_LOGIN_OPENID:web:console}
     jwt-secret: ${WECHAT_JWT_SECRET:replace-this-with-env-secret}
     jwt-issuer: wechat-mini-program
     token-ttl-seconds: 86400

@@ -3,6 +3,7 @@ package com.example.javaagentmvp.web;
 import com.example.javaagentmvp.auth.AuthRequestSupport;
 import com.example.javaagentmvp.auth.AuthenticatedUser;
 import com.example.javaagentmvp.auth.GuestQuotaService;
+import com.example.javaagentmvp.auth.WebAuthService;
 import com.example.javaagentmvp.auth.WechatAuthService;
 import com.example.javaagentmvp.auth.WechatAvatarStorage;
 import com.example.javaagentmvp.auth.persistence.model.WechatUserRecord;
@@ -27,10 +28,15 @@ import java.util.Base64;
 public class WechatAuthController {
 
     private final WechatAuthService authService;
+    private final WebAuthService webAuthService;
     private final WechatAvatarStorage avatarStorage;
 
-    public WechatAuthController(WechatAuthService authService, WechatAvatarStorage avatarStorage) {
+    public WechatAuthController(
+            WechatAuthService authService,
+            WebAuthService webAuthService,
+            WechatAvatarStorage avatarStorage) {
         this.authService = authService;
+        this.webAuthService = webAuthService;
         this.avatarStorage = avatarStorage;
     }
 
@@ -57,6 +63,24 @@ public class WechatAuthController {
                 toQuotaDto(result.loginQuota()),
                 result.requestId()
         );
+    }
+
+    @PostMapping("/web/login")
+    public LoginResponse webLogin(@RequestBody WebLoginRequest request, HttpServletRequest httpRequest) {
+        if (!webAuthService.isEnabled()) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Web console login is not configured");
+        }
+        if (request == null || request.secret() == null || request.secret().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "secret is required");
+        }
+        WechatAuthService.LoginResult result = webAuthService.login(request.secret(), httpRequest);
+        return new LoginResponse(
+                result.token(),
+                result.expiresAt(),
+                toUserDto(result.user()),
+                toQuotaDto(result.quota()),
+                toQuotaDto(result.loginQuota()),
+                result.requestId());
     }
 
     @GetMapping("/me")
@@ -160,6 +184,9 @@ public class WechatAuthController {
             String province,
             String city,
             Integer gender) {
+    }
+
+    public record WebLoginRequest(String secret) {
     }
 
     public record UserDto(

@@ -26,10 +26,10 @@ public class AuthWebMvcConfig implements WebMvcConfigurer {
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(loginRateLimitInterceptor)
-                .addPathPatterns("/api/auth/wechat/login");
+                .addPathPatterns("/api/auth/wechat/login", "/api/auth/web/login");
         registry.addInterceptor(authInterceptor)
                 .addPathPatterns("/api/**")
-                .excludePathPatterns("/api/auth/wechat/login");
+                .excludePathPatterns("/api/auth/wechat/login", "/api/auth/web/login");
     }
 
     @Override

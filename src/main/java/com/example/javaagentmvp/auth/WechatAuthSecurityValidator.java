@@ -20,6 +20,15 @@ public class WechatAuthSecurityValidator {
 
     @EventListener(ApplicationReadyEvent.class)
     public void validateOnStartup() {
+        if (properties.webLoginEnabled()) {
+            if (properties.webLoginSecret().length() < 32) {
+                throw new IllegalStateException(
+                        "WEB_LOGIN_SECRET must be at least 32 characters when web console login is enabled");
+            }
+            log.info("Web console login is enabled (WEB_LOGIN_SECRET)");
+        } else {
+            log.warn("WEB_LOGIN_SECRET is not set; Web console login is disabled");
+        }
         if (properties.appId() == null || properties.appId().isBlank()) {
             log.warn("WECHAT_APP_ID is not set; WeChat mini-program login is disabled");
             return;

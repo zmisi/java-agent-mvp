@@ -6,6 +6,7 @@ function $(id) {
 
 const SETTINGS_KEY = "db-agent-ui-settings";
 const CONTEXT_USAGE_CACHE_KEY = "db-agent-context-usage-cache";
+const AUTH_TOKEN_KEY = "db-agent-auth-token";
 const SIDEBAR_RECENT_LIMIT = 6;
 
 const state = {
@@ -99,8 +100,114 @@ function showToast(text) {
   showToast._t = window.setTimeout(() => el.classList.remove("show"), 4500);
 }
 
+function getAuthToken() {
+  try {
+    return localStorage.getItem(AUTH_TOKEN_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+function setAuthToken(token) {
+  try {
+    localStorage.setItem(AUTH_TOKEN_KEY, token || "");
+  } catch {
+    // ignore storage failures
+  }
+}
+
+function clearAuthToken() {
+  try {
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+  } catch {
+    // ignore storage failures
+  }
+}
+
+function showAuthOverlay(message) {
+  const overlay = $("authOverlay");
+  const errorEl = $("authOverlayError");
+  if (overlay) {
+    overlay.removeAttribute("hidden");
+  }
+  if (errorEl) {
+    if (message) {
+      errorEl.removeAttribute("hidden");
+      errorEl.textContent = message;
+    } else {
+      errorEl.hidden = true;
+      errorEl.textContent = "";
+    }
+  }
+}
+
+function hideAuthOverlay() {
+  const overlay = $("authOverlay");
+  if (overlay) {
+    overlay.hidden = true;
+  }
+}
+
+let authBootstrapComplete = false;
+
+async function submitWebLogin() {
+  const input = $("authSecretInput");
+  const secret = input ? input.value : "";
+  if (!secret) {
+    showAuthOverlay("请输入登录密钥。");
+    return;
+  }
+  try {
+    const result = await api("/api/auth/web/login", {
+      method: "POST",
+      skipAuth: true,
+      body: JSON.stringify({ secret }),
+    });
+    if (!result || !result.token) {
+      throw new Error("登录响应未包含 token");
+    }
+    setAuthToken(result.token);
+    hideAuthOverlay();
+    if (input) {
+      input.value = "";
+    }
+    await refreshSessions(null);
+    if (typeof refreshReleasesWorkspace === "function") {
+      refreshReleasesWorkspace(null).catch(() => {});
+    }
+    if (typeof refreshProvisioningWorkspace === "function") {
+      refreshProvisioningWorkspace(null).catch(() => {});
+    }
+  } catch (e) {
+    showAuthOverlay(String(e && e.message ? e.message : e));
+  }
+}
+
+async function ensureAuthenticated() {
+  const token = getAuthToken();
+  if (token) {
+    try {
+      await api("/api/auth/me", { suppressAuthRedirect: true });
+      hideAuthOverlay();
+      return true;
+    } catch {
+      clearAuthToken();
+    }
+  }
+  showAuthOverlay();
+  return false;
+}
+
+function handleUnauthorized() {
+  if (!authBootstrapComplete) {
+    return;
+  }
+  clearAuthToken();
+  showAuthOverlay("会话已过期，请重新登录。");
+}
+
 async function api(path, options = {}) {
-  const { headers: hdr, signal, ...rest } = options;
+  const { headers: hdr, signal, skipAuth, suppressAuthRedirect, ...rest } = options;
   const headers = new Headers(hdr || {});
   const method = (rest.method || "GET").toUpperCase();
   const body = rest.body;
@@ -109,12 +216,21 @@ async function api(path, options = {}) {
       headers.set("Content-Type", "application/json");
     }
   }
+  if (!skipAuth) {
+    const token = getAuthToken();
+    if (token && !headers.has("Authorization")) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+  }
   const res = await fetch(path, {
     ...rest,
     headers,
     signal,
   });
   if (!res.ok) {
+    if (res.status === 401 && !skipAuth && !suppressAuthRedirect) {
+      handleUnauthorized();
+    }
     const errBody = await res.text().catch(() => "");
     throw new Error(`${res.status} ${res.statusText}${errBody ? `\n${errBody}` : ""}`);
   }
@@ -1096,10 +1212,27 @@ function wire() {
   }
 }
 
+let resolveAuthReady;
+window.authReady = new Promise((resolve) => {
+  resolveAuthReady = resolve;
+});
+
 window.addEventListener("DOMContentLoaded", async () => {
   document.documentElement.dataset.theme = loadSettings().theme;
   applySettings(loadSettings());
   state.contextUsageBySessionId = loadContextUsageCache();
+
+  let authed = false;
+  try {
+    authed = await ensureAuthenticated();
+    resolveAuthReady(authed);
+  } catch (e) {
+    resolveAuthReady(false);
+    showToast(String(e && e.message ? e.message : e));
+  } finally {
+    authBootstrapComplete = true;
+  }
+
   wire();
   clearContextUsage();
   setComposerState(false);
@@ -1113,9 +1246,19 @@ window.addEventListener("DOMContentLoaded", async () => {
   box.appendChild(empty);
   setSessionEmptyState(false);
 
-  try {
-    await refreshSessions(null);
-  } catch (e) {
-    showToast(String(e && e.message ? e.message : e));
+  const authForm = $("authLoginForm");
+  if (authForm) {
+    authForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      submitWebLogin().catch((e) => showAuthOverlay(String(e && e.message ? e.message : e)));
+    });
+  }
+
+  if (authed) {
+    try {
+      await refreshSessions(null);
+    } catch (e) {
+      showToast(String(e && e.message ? e.message : e));
+    }
   }
 });

@@ -780,12 +780,16 @@ function wireProvisioning() {
   });
 }
 
-window.addEventListener("DOMContentLoaded", () => {
+window.addEventListener("DOMContentLoaded", async () => {
   try {
     wireProvisioning();
   } catch (err) {
     console.error("wireProvisioning failed:", err);
     showToast?.(`Provisioning UI failed to initialize: ${err.message}`);
+  }
+  const authed = await (window.authReady || Promise.resolve(false));
+  if (!authed) {
+    return;
   }
   refreshProvisioningWorkspace(null).catch((err) => console.error("refreshProvisioningWorkspace:", err));
 });

@@ -69,38 +69,7 @@ public class WechatAuthService {
                 wechatUserMapper.updateRoleAndStatus(user.id(), UserRole.ADMIN.value(), UserStatus.ACTIVE.value());
                 user = wechatUserMapper.findById(user.id());
             }
-            guestQuotaService.ensureGuestUsage(user.id());
-            UserRole userRole = UserRole.fromString(user.role());
-            guestQuotaService.assertCanLogin(user.id(), userRole);
-
-            AuthSessionService.SessionCreated sessionCreated = authSessionService.createSession(user.id());
-            AuthenticatedUser authUser = new AuthenticatedUser(
-                    user.id(),
-                    user.openid(),
-                    userRole,
-                    sessionCreated.sessionId(),
-                    sessionCreated.jti());
-            String token = jwtService.generateToken(authUser, sessionCreated.expiresAt());
-
-            guestQuotaService.recordLogin(user.id(), userRole);
-
-            loginAuditMapper.insert(
-                    session.openid(),
-                    "SUCCESS",
-                    null,
-                    clientIp(httpRequest),
-                    httpRequest.getHeader("User-Agent"),
-                    requestId);
-
-            GuestQuotaService.QuotaInfo quota = guestQuotaService.getQuotaInfo(user.id(), userRole);
-            GuestQuotaService.QuotaInfo loginQuota = guestQuotaService.getLoginInfo(user.id(), userRole);
-            return new LoginResult(
-                    token,
-                    sessionCreated.expiresAt().toString(),
-                    user,
-                    requestId,
-                    quota,
-                    loginQuota);
+            return completeLogin(user, session.openid(), httpRequest, requestId);
         } catch (Exception ex) {
             loginAuditMapper.insert(
                     null,
@@ -111,6 +80,45 @@ public class WechatAuthService {
                     requestId);
             throw ex;
         }
+    }
+
+    public LoginResult completeLogin(
+            WechatUserRecord user,
+            String auditOpenid,
+            HttpServletRequest httpRequest,
+            String requestId) {
+        guestQuotaService.ensureGuestUsage(user.id());
+        UserRole userRole = UserRole.fromString(user.role());
+        guestQuotaService.assertCanLogin(user.id(), userRole);
+
+        AuthSessionService.SessionCreated sessionCreated = authSessionService.createSession(user.id());
+        AuthenticatedUser authUser = new AuthenticatedUser(
+                user.id(),
+                user.openid(),
+                userRole,
+                sessionCreated.sessionId(),
+                sessionCreated.jti());
+        String token = jwtService.generateToken(authUser, sessionCreated.expiresAt());
+
+        guestQuotaService.recordLogin(user.id(), userRole);
+
+        loginAuditMapper.insert(
+                auditOpenid,
+                "SUCCESS",
+                null,
+                clientIp(httpRequest),
+                httpRequest.getHeader("User-Agent"),
+                requestId);
+
+        GuestQuotaService.QuotaInfo quota = guestQuotaService.getQuotaInfo(user.id(), userRole);
+        GuestQuotaService.QuotaInfo loginQuota = guestQuotaService.getLoginInfo(user.id(), userRole);
+        return new LoginResult(
+                token,
+                sessionCreated.expiresAt().toString(),
+                user,
+                requestId,
+                quota,
+                loginQuota);
     }
 
     public UserProfile getCurrentUser(AuthenticatedUser authenticatedUser) {

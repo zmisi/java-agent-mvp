@@ -9,6 +9,8 @@ import java.util.List;
 public record WechatAuthProperties(
         String appId,
         String appSecret,
+        String webLoginSecret,
+        String webLoginOpenid,
         String jwtSecret,
         String jwtIssuer,
         long tokenTtlSeconds,
@@ -19,6 +21,17 @@ public record WechatAuthProperties(
         int loginRateLimitPerMinute,
         String avatarUploadDir,
         String bootstrapAdminOpenids) {
+
+    public boolean webLoginEnabled() {
+        return webLoginSecret != null && !webLoginSecret.isBlank();
+    }
+
+    public String resolvedWebLoginOpenid() {
+        if (webLoginOpenid == null || webLoginOpenid.isBlank()) {
+            return "web:console";
+        }
+        return webLoginOpenid.strip();
+    }
 
     public List<String> bootstrapAdminOpenidList() {
         if (bootstrapAdminOpenids == null || bootstrapAdminOpenids.isBlank()) {

@@ -567,7 +567,11 @@ function wireReleases() {
   });
 }
 
-window.addEventListener("DOMContentLoaded", () => {
+window.addEventListener("DOMContentLoaded", async () => {
+  const authed = await (window.authReady || Promise.resolve(false));
+  if (!authed) {
+    return;
+  }
   refreshReleasesWorkspace(null).catch(() => {
     /* sidebar list loads on startup; ignore if API unavailable */
   });
