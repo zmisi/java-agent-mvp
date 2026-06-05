@@ -2,6 +2,7 @@ package com.example.javaagentmvp.chat.ui;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -45,6 +46,36 @@ public class McpTableExtractor {
         return Optional.empty();
     }
 
+    /** Builds a tier table from a pre-classified majors array (title uses {@code toolInput} score). */
+    public Optional<ChatTable> extractMajorByScoreFromMajors(
+            String toolInput,
+            JsonNode majorsNode,
+            String tierLabel) {
+        if (majorsNode == null || !majorsNode.isArray()) {
+            return Optional.empty();
+        }
+        if (majorsNode.isEmpty() && (tierLabel == null || tierLabel.isBlank())) {
+            return Optional.empty();
+        }
+        return buildMajorByScoreTable(toolInput, majorsNode, tierLabel);
+    }
+
+    public String unwrapToolPayload(String responseData) {
+        return unwrapToolPayloadInternal(responseData);
+    }
+
+    public Optional<JsonNode> parseMajorByScoreRoot(String responseData) {
+        if (responseData == null || responseData.isBlank()) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(objectMapper.readTree(unwrapToolPayload(responseData)));
+        }
+        catch (Exception ex) {
+            return Optional.empty();
+        }
+    }
+
     /** Spring AI MCP prefixes tool names, e.g. {@code opstream_agent_admission_score_getMajorByScore}. */
     private static boolean matchesTool(String toolName, String baseName) {
         if (toolName == null || baseName == null || baseName.isBlank()) {
@@ -73,7 +104,7 @@ public class McpTableExtractor {
     /**
      * Tool callbacks may return MCP content blocks, e.g. {@code [{"text":"{\"count\":1,...}"}]}.
      */
-    private String unwrapToolPayload(String responseData) {
+    private String unwrapToolPayloadInternal(String responseData) {
         String trimmed = responseData.strip();
         if (!trimmed.startsWith("[")) {
             return trimmed;
@@ -127,17 +158,29 @@ public class McpTableExtractor {
         if (majorsNode.isEmpty() && tierLabel == null) {
             return Optional.empty();
         }
+        return buildMajorByScoreTable(toolInput, majorsNode, tierLabel);
+    }
 
+    private Optional<ChatTable> buildMajorByScoreTable(String toolInput, JsonNode majorsNode, String tierLabel) {
         List<Map<String, String>> rows = new ArrayList<>();
         for (JsonNode major : majorsNode) {
             Map<String, String> row = new LinkedHashMap<>();
+            row.put("university_code", formatCell(major.get("university_code")));
             for (ChatTableColumn column : MAJOR_BY_SCORE_COLUMNS) {
                 row.put(column.key(), formatCell(major.get(column.key())));
             }
             rows.add(row);
         }
+        ChatTable table = new ChatTable(buildMajorByScoreTitle(toolInput, tierLabel), MAJOR_BY_SCORE_COLUMNS, rows);
+        return Optional.of(ChatTableGrouper.withGroups(table));
+    }
 
-        return Optional.of(new ChatTable(buildMajorByScoreTitle(toolInput, tierLabel), MAJOR_BY_SCORE_COLUMNS, rows));
+    public ArrayNode copyMajorsArray(JsonNode majorsNode) {
+        ArrayNode copy = objectMapper.createArrayNode();
+        if (majorsNode != null && majorsNode.isArray()) {
+            majorsNode.forEach(copy::add);
+        }
+        return copy;
     }
 
     private String buildMajorByScoreTitle(String toolInput, String tierLabel) {

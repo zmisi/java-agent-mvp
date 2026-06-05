@@ -14,18 +14,17 @@ class McpTableExtractorTest {
     private final McpTableExtractor extractor = new McpTableExtractor(new ObjectMapper());
 
     @Test
-    void extractMajorByScoreBuildsTierTitle() {
+    void extractMajorByScoreBuildsTierTitleWithUserScore() throws Exception {
         String toolInput = """
-                {"score":645,"province":"安徽","year":2025,"subject_group":"物理类","admission_type":"普通批"}
+                {"score":630,"province":"安徽","year":2025,"subject_group":"物理类","admission_type":"普通批"}
                 """;
-        String responseData = """
-                {"count":0,"majors":[]}
-                """;
+        var majors = new ObjectMapper().createArrayNode();
 
-        ChatTable table = extractor.extract("getMajorByScore", toolInput, responseData, "冲").orElseThrow();
+        ChatTable table = extractor.extractMajorByScoreFromMajors(toolInput, majors, "冲").orElseThrow();
 
-        assertEquals("冲（645分 · 安徽 · 2025 · 物理类 · 普通批）", table.title());
+        assertEquals("冲（630分 · 安徽 · 2025 · 物理类 · 普通批）", table.title());
         assertTrue(table.rows().isEmpty());
+        assertTrue(table.groups().isEmpty());
     }
 
     @Test
@@ -71,6 +70,70 @@ class McpTableExtractorTest {
         assertEquals("630", table.rows().get(0).get("min_score"));
         assertEquals("10491", table.rows().get(0).get("min_rank"));
         assertEquals("-", table.rows().get(1).get("min_rank"));
+        assertEquals(1, table.groups().size());
+        assertEquals("合肥工业大学", table.groups().get(0).universityName());
+        assertEquals(2, table.groups().get(0).majorCount());
+        assertEquals("628", table.groups().get(0).minScore());
+    }
+
+    @Test
+    void extractMajorByScoreBuildsUniversityGroupsForMultipleSchools() {
+        String toolInput = """
+                {"score":600,"province":"安徽","year":2025,"subject_group":"物理类","admission_type":"普通批"}
+                """;
+        String responseData = """
+                {
+                  "count": 3,
+                  "majors": [
+                    {
+                      "university_code": "AHU",
+                      "university_name": "安徽大学",
+                      "major_name": "法学",
+                      "campus": "-",
+                      "min_score": "615",
+                      "min_rank": 12000,
+                      "max_score": null,
+                      "year": 2025,
+                      "subject_group": "物理类",
+                      "admission_type": "普通批"
+                    },
+                    {
+                      "university_code": "HFUT",
+                      "university_name": "合肥工业大学",
+                      "major_name": "软件工程",
+                      "campus": "宣城校区",
+                      "min_score": "602",
+                      "min_rank": 15000,
+                      "max_score": null,
+                      "year": 2025,
+                      "subject_group": "物理类",
+                      "admission_type": "普通批"
+                    },
+                    {
+                      "university_code": "HFUT",
+                      "university_name": "合肥工业大学",
+                      "major_name": "土木工程",
+                      "campus": "合肥校区",
+                      "min_score": "601",
+                      "min_rank": 16000,
+                      "max_score": null,
+                      "year": 2025,
+                      "subject_group": "物理类",
+                      "admission_type": "普通批"
+                    }
+                  ]
+                }
+                """;
+
+        ChatTable table = extractor.extract("getMajorByScore", toolInput, responseData, "冲").orElseThrow();
+
+        assertEquals(2, table.groups().size());
+        assertEquals("安徽大学", table.groups().get(0).universityName());
+        assertEquals("AHU", table.groups().get(0).universityCode());
+        assertEquals("615", table.groups().get(0).minScore());
+        assertEquals("合肥工业大学", table.groups().get(1).universityName());
+        assertEquals(2, table.groups().get(1).majorCount());
+        assertFalse(table.groups().get(0).majors().get(0).containsKey("university_name"));
     }
 
     @Test

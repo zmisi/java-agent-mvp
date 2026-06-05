@@ -33,6 +33,23 @@ class TranscriptBuilderTest {
     }
 
     @Test
+    void backfillsGroupsForLegacyPersistedUiTables() {
+        List<ChatMemoryMessageRow> rows = List.of(
+                row(1, """
+                        {"kind":"user","text":"安徽630分可报哪些专业？"}
+                        """),
+                row(2, """
+                        {"kind":"assistant","text":"630分可报考合肥工业大学软件工程等专业。","uiTables":[{"title":"可报专业","columns":[{"key":"major_name","label":"专业"}],"rows":[{"university_code":"HFUT","university_name":"合肥工业大学","major_name":"软件工程","campus":"宣城校区","min_score":"628","min_rank":"12000","max_score":"633","year":"2025","subject_group":"物理类","admission_type":"普通批"}]}]}
+                        """));
+
+        List<TranscriptBuilder.TranscriptRow> transcript = builder.build(rows);
+
+        assertEquals(1, transcript.get(1).tables().get(0).groups().size());
+        assertEquals("合肥工业大学", transcript.get(1).tables().get(0).groups().get(0).universityName());
+        assertEquals("软件工程", transcript.get(1).tables().get(0).groups().get(0).majors().get(0).get("major_name"));
+    }
+
+    @Test
     void attachesTablesToFinalAssistantAndSkipsToolOnlyAssistant() {
         List<ChatMemoryMessageRow> rows = List.of(
                 row(1, """

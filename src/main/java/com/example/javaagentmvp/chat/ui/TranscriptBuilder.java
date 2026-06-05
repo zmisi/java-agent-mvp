@@ -51,7 +51,12 @@ public final class TranscriptBuilder {
                     tables = mcpTableExtractor.extractFromToolResponses(pendingTools);
                 }
                 pendingTools.clear();
-                transcript.add(new TranscriptRow(row.id(), row.createdAt(), row.role(), row.text(), tables));
+                transcript.add(new TranscriptRow(
+                        row.id(),
+                        row.createdAt(),
+                        row.role(),
+                        row.text(),
+                        ChatTableGrouper.enrichTables(tables)));
             }
         }
         return transcript;
