@@ -17,7 +17,7 @@
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
-<div class="app" id="appRoot" data-workspace="chat">
+<div class="app" id="appRoot">
   <aside class="sidebar">
     <div class="sidebar-actions">
       <button id="newChat" type="button" class="sidebar-action" title="New chat">
@@ -27,38 +27,12 @@
         </svg>
         <span class="sidebar-action-label">New Chat</span>
       </button>
-      <button id="createReleaseBtn" type="button" class="sidebar-action" title="New DB release from design doc">
-        <svg class="sidebar-action-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-          <path d="M3 4.5h10M3 8h10M3 11.5h6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
-          <path d="M12 2.5v3M10.5 4h3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-        </svg>
-        <span class="sidebar-action-label">New DB Release</span>
-      </button>
-      <button id="createDbProvisioningBtn" type="button" class="sidebar-action" title="New DB provisioning">
-        <svg class="sidebar-action-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-          <path d="M8 2.5c2.8 0 5 1 5 2.3S10.8 7 8 7 3 6 3 4.8s2.2-2.3 5-2.3Z" stroke="currentColor" stroke-width="1.2"/>
-          <path d="M3 4.8v3.4c0 1.2 2.2 2.3 5 2.3s5-1 5-2.3V4.8M3 8.2v3c0 1.2 2.2 2.3 5 2.3s5-1 5-2.3v-3" stroke="currentColor" stroke-width="1.2"/>
-        </svg>
-        <span class="sidebar-action-label">New DB Provisioning</span>
-      </button>
     </div>
 
     <div class="sidebar-nav">
       <section class="sidebar-group" id="chatSection" data-section="chat">
         <div class="sidebar-group-label">Chats</div>
         <div id="sessionList" class="sidebar-list"></div>
-      </section>
-
-      <section class="sidebar-group" id="releaseSection" data-section="releases">
-        <div class="sidebar-group-label">DB Releases</div>
-        <div id="releaseSidebarList" class="sidebar-list"></div>
-      </section>
-
-      <section class="sidebar-group" id="dbProvisioningSection" data-section="db-provisioning">
-        <div class="sidebar-group-label">DB Provisioning</div>
-        <div id="dbProvisioningSidebarList" class="sidebar-list">
-          <div class="sidebar-list-empty">No provisioning yet</div>
-        </div>
       </section>
     </div>
 
@@ -123,26 +97,6 @@
         </div>
       </footer>
     </main>
-
-    <main id="releasesView" class="workspace workspace-releases" aria-label="DB Release" hidden>
-      <header class="workspace-header workspace-header-releases">
-        <div class="workspace-header-text">
-          <h1 class="workspace-heading">DB Release</h1>
-          <p id="releaseDetailSubtitle" class="workspace-subtitle">Select a release from the sidebar</p>
-        </div>
-      </header>
-      <section id="releasesPanel" class="releases-workspace-body"></section>
-    </main>
-
-    <main id="provisioningView" class="workspace workspace-releases" aria-label="DB Provisioning" hidden>
-      <header class="workspace-header workspace-header-releases">
-        <div class="workspace-header-text">
-          <h1 class="workspace-heading">DB Provisioning</h1>
-          <p id="provisioningDetailSubtitle" class="workspace-subtitle">Select a job from the sidebar</p>
-        </div>
-      </header>
-      <section id="provisioningPanel" class="releases-workspace-body"></section>
-    </main>
   </div>
 </div>
 
@@ -182,139 +136,6 @@
   </div>
 </div>
 
-<div id="provisioningModalBackdrop" class="modal-backdrop" hidden></div>
-<div id="provisioningModal" class="modal-panel modal-panel-wide" role="dialog" aria-labelledby="provisioningModalTitle" hidden>
-  <div class="modal-header">
-    <h2 id="provisioningModalTitle">New DB Provisioning</h2>
-    <button type="button" class="btn btn-icon" id="closeProvisioningModal" aria-label="Close">
-      <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-        <path d="M3 3l8 8M11 3 3 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-      </svg>
-    </button>
-  </div>
-  <div class="modal-body">
-    <section class="setting-group">
-      <label class="setting-label" for="provTitleInput">Title (optional)</label>
-      <input id="provTitleInput" type="text" class="setting-control" placeholder="myapp@prod-server"/>
-    </section>
-    <section class="setting-group">
-      <label class="setting-label" for="provHostInput">Linux host</label>
-      <input id="provHostInput" type="text" class="setting-control" required placeholder="192.168.1.10"/>
-    </section>
-    <section class="setting-group">
-      <label class="setting-label" for="provSshPortInput">SSH port</label>
-      <input id="provSshPortInput" type="number" class="setting-control" value="22" min="1" max="65535"/>
-    </section>
-    <section class="setting-group">
-      <label class="setting-label" for="provSshUserInput">SSH user</label>
-      <input id="provSshUserInput" type="text" class="setting-control" required placeholder="ubuntu"/>
-    </section>
-    <section class="setting-group">
-      <label class="setting-label" for="provAuthTypeSelect">Authentication</label>
-      <select id="provAuthTypeSelect" class="setting-control">
-        <option value="PASSWORD">Password</option>
-        <option value="PRIVATE_KEY">Private key</option>
-      </select>
-    </section>
-    <section class="setting-group" id="provPasswordGroup">
-      <label class="setting-label" for="provPasswordInput">SSH password</label>
-      <input id="provPasswordInput" type="password" class="setting-control" autocomplete="off"/>
-    </section>
-    <section class="setting-group" id="provKeyGroup" hidden>
-      <label class="setting-label" for="provKeyInput">Private key (PEM)</label>
-      <textarea id="provKeyInput" class="setting-control" rows="4" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"></textarea>
-    </section>
-    <section class="setting-group" id="provPassphraseGroup" hidden>
-      <label class="setting-label" for="provPassphraseInput">Key passphrase (optional)</label>
-      <input id="provPassphraseInput" type="password" class="setting-control" autocomplete="off"/>
-    </section>
-    <section class="setting-group prov-preflight-section">
-      <span class="setting-label">Target compatibility</span>
-      <p class="setting-hint">Check the target host to detect OS and which PostgreSQL versions can be installed.</p>
-      <button type="button" class="btn btn-ghost btn-sm" id="provCheckTargetBtn">
-        <span class="prov-btn-spinner" id="provCheckTargetSpinner" aria-hidden="true"></span>
-        <span id="provCheckTargetBtnLabel">Check target</span>
-      </button>
-      <p id="provPreflightStatus" class="setting-hint prov-preflight-status" hidden></p>
-      <div id="provPreflightLogWrap" class="prov-preflight-log-wrap" hidden>
-        <span class="setting-label">Preflight log</span>
-        <pre id="provPreflightLog" class="prov-preflight-log" aria-live="polite"></pre>
-      </div>
-    </section>
-    <section class="setting-group" id="provPgVersionGroup">
-      <label class="setting-label" for="provPgVersionSelect">PostgreSQL version to install</label>
-      <select id="provPgVersionSelect" class="setting-control" disabled>
-        <option value="">Check target first…</option>
-      </select>
-      <p id="provPgVersionHint" class="setting-hint">Run <strong>Check target</strong> above to load installable versions for this OS.</p>
-    </section>
-    <section class="setting-group">
-      <label class="setting-label" for="provMemoryInput">Memory (MB)</label>
-      <input id="provMemoryInput" type="number" class="setting-control" value="2048" min="256"/>
-    </section>
-    <section class="setting-group">
-      <label class="setting-label" for="provDiskInput">Disk required (GB)</label>
-      <input id="provDiskInput" type="number" class="setting-control" value="20" min="1"/>
-    </section>
-    <section class="setting-group">
-      <label class="setting-label" for="provDbNameInput">Database name</label>
-      <input id="provDbNameInput" type="text" class="setting-control" required placeholder="appdb"/>
-    </section>
-    <section class="setting-group">
-      <label class="setting-label" for="provSchemaInput">Schema name</label>
-      <input id="provSchemaInput" type="text" class="setting-control" required placeholder="app"/>
-    </section>
-    <section class="setting-group">
-      <label class="setting-label" for="provOwnerInput">DB owner user (optional)</label>
-      <input id="provOwnerInput" type="text" class="setting-control" placeholder="appdb_owner"/>
-    </section>
-    <section class="setting-group">
-      <label class="setting-label" for="provOwnerPasswordInput">DB owner password (optional)</label>
-      <input id="provOwnerPasswordInput" type="password" class="setting-control" autocomplete="new-password"/>
-    </section>
-    <section class="setting-group">
-      <span class="setting-label">Extensions</span>
-      <label class="setting-hint"><input type="checkbox" id="provExtPgStat" value="pg_stat_statements" checked/> pg_stat_statements (metrics)</label>
-      <label class="setting-hint"><input type="checkbox" id="provExtAutoExplain" value="auto_explain"/> auto_explain (slow queries)</label>
-      <label class="setting-hint"><input type="checkbox" id="provExtPgProfile" value="pg_profile"/> pg_profile</label>
-    </section>
-    <div class="modal-actions">
-      <button type="button" class="btn btn-ghost" id="cancelProvisioningModal">Cancel</button>
-      <button type="button" class="btn btn-new" id="confirmProvisioningModal">Create &amp; run</button>
-    </div>
-  </div>
-</div>
-
-<div id="releaseModalBackdrop" class="modal-backdrop" hidden></div>
-<div id="releaseModal" class="modal-panel modal-panel-wide" role="dialog" aria-labelledby="releaseModalTitle" hidden>
-  <div class="modal-header">
-    <h2 id="releaseModalTitle">New DB Release</h2>
-    <button type="button" class="btn btn-icon" id="closeReleaseModal" aria-label="Close">
-      <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-        <path d="M3 3l8 8M11 3 3 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-      </svg>
-    </button>
-  </div>
-  <div class="modal-body">
-    <section class="setting-group">
-      <label class="setting-label" for="releaseTitleInput">Release title</label>
-      <input id="releaseTitleInput" type="text" class="setting-control" required placeholder="REL-20260524-acd27f"/>
-    </section>
-    <section class="setting-group">
-      <label class="setting-label">Upload design doc</label>
-      <div id="designDocDropzone" class="upload-dropzone" tabindex="0" role="button" aria-label="Upload markdown design document">
-        <span class="upload-dropzone-text">Drop a .md file here, or click to browse</span>
-        <input id="releaseDesignDocUpload" type="file" accept=".md,text/markdown" hidden/>
-      </div>
-      <p id="designDocUploadStatus" class="setting-hint" hidden></p>
-    </section>
-    <div class="modal-actions">
-      <button type="button" class="btn btn-ghost" id="cancelReleaseModal">Cancel</button>
-      <button type="button" class="btn btn-new" id="confirmReleaseModal" disabled>Create release</button>
-    </div>
-  </div>
-</div>
-
 <div id="authOverlay" class="auth-overlay" hidden>
   <div class="auth-panel">
     <h2 class="auth-title">Web Console Login</h2>
@@ -328,7 +149,5 @@
 </div>
 
 <script src="/app.js"></script>
-<script src="/releases.js"></script>
-<script src="/provisioning.js"></script>
 </body>
 </html>

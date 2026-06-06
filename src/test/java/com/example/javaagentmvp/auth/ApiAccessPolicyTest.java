@@ -12,15 +12,13 @@ class ApiAccessPolicyTest {
         assertThat(ApiAccessPolicy.isAllowed(UserRole.GUEST, "/api/conversations")).isTrue();
         assertThat(ApiAccessPolicy.isAllowed(UserRole.GUEST, "/api/conversations/abc/chat")).isTrue();
         assertThat(ApiAccessPolicy.isAllowed(UserRole.GUEST, "/api/admission/query")).isTrue();
-        assertThat(ApiAccessPolicy.isAllowed(UserRole.GUEST, "/api/releases")).isFalse();
-        assertThat(ApiAccessPolicy.isAllowed(UserRole.GUEST, "/api/db-provisioning")).isFalse();
         assertThat(ApiAccessPolicy.isAllowed(UserRole.GUEST, "/api/admin/users")).isFalse();
     }
 
     @Test
     void adminCanUseOperationalApis() {
-        assertThat(ApiAccessPolicy.isAllowed(UserRole.ADMIN, "/api/releases")).isTrue();
-        assertThat(ApiAccessPolicy.isAllowed(UserRole.ADMIN, "/api/design-docs/content")).isTrue();
+        assertThat(ApiAccessPolicy.isAllowed(UserRole.ADMIN, "/api/conversations")).isTrue();
+        assertThat(ApiAccessPolicy.isAllowed(UserRole.ADMIN, "/api/admin/users")).isTrue();
     }
 
     @Test

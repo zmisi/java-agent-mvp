@@ -18,25 +18,12 @@ app:
     # 逗号分隔多个 openid，例如: oAbc123,oDef456
     bootstrap-admin-openids: ${WECHAT_BOOTSTRAP_ADMIN_OPENIDS:}
   db-agent:
-    design-docs-path: file:./docs/design
-    releases-path: file:./db/releases
-    draft-sql-prompt-location: classpath:prompts/draft-sql-system.md
-    deploy-target: test-deploy
     chat-target: chat-readonly
-    provisioning-mcp-command: ${JAVA_AGENT_MCP_COMMAND:node}
-    provisioning-mcp-args:
-      - ${JAVA_AGENT_MCP_SCRIPT:./java-agent-mcp/bin/java-agent-mcp.js}
-    # MCP tool call timeout (INSTALL_PG can take a long time on slow networks)
-    provisioning-timeout-seconds: 7200
     targets:
       chat-readonly:
         type: mcp
         servers:
           - admission-score
-      test-deploy:
-        type: jdbc
-        schema: emp_test
-        # url/username/password optional — inherit from spring.datasource
   agent:
     prompt:
       # System prompt file (Markdown/plain text). Edit without recompiling Java.

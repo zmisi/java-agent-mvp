@@ -1,7 +1,6 @@
 HELP.md
 .env
 target/
-java-agent-mcp/node_modules/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/

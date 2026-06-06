@@ -1,5 +1,5 @@
 /* global fetch API, marked */
-/** Shared by app.js, releases.js, provisioning.js (must be `function`, not script-scoped const). */
+/** Shared DOM helpers (must be `function`, not script-scoped const). */
 function $(id) {
   return document.getElementById(id);
 }
@@ -172,12 +172,6 @@ async function submitWebLogin() {
       input.value = "";
     }
     await refreshSessions(null);
-    if (typeof refreshReleasesWorkspace === "function") {
-      refreshReleasesWorkspace(null).catch(() => {});
-    }
-    if (typeof refreshProvisioningWorkspace === "function") {
-      refreshProvisioningWorkspace(null).catch(() => {});
-    }
   } catch (e) {
     showAuthOverlay(String(e && e.message ? e.message : e));
   }
@@ -730,7 +724,6 @@ async function refreshSessions(selectId) {
     return;
   }
 
-  const chatViewActive = typeof releaseState === "undefined" || releaseState.view === "chat";
   const activeId = selectId ?? state.activeId;
   const visibleSessions = selectVisibleSidebarItems(
     sessions,
@@ -740,7 +733,7 @@ async function refreshSessions(selectId) {
   );
   for (const s of visibleSessions) {
     const row = document.createElement("div");
-    const isActive = chatViewActive && s.id === activeId;
+    const isActive = s.id === activeId;
     row.className = "sidebar-list-row" + (isActive ? " active" : "");
     row.dataset.id = s.id;
 
@@ -784,9 +777,6 @@ async function refreshSessions(selectId) {
 }
 
 async function selectSession(id) {
-  if (typeof showView === "function") {
-    showView("chat");
-  }
   if (state.inFlight && state.activeId !== id) {
     abortInFlight();
   }
@@ -1125,9 +1115,6 @@ function wireSettings() {
 
 function wire() {
   $("newChat").addEventListener("click", async () => {
-    if (typeof showView === "function") {
-      showView("chat");
-    }
     try {
       await createSession();
     } catch (e) {
@@ -1177,12 +1164,6 @@ function wire() {
         closeSettings();
       }
       closeContextUsagePanel();
-      if (typeof closeReleaseModal === "function" && !$("releaseModal").hidden) {
-        closeReleaseModal();
-      }
-      if (typeof closeProvisioningModal === "function" && !$("provisioningModal").hidden) {
-        closeProvisioningModal();
-      }
     }
   });
 
@@ -1206,10 +1187,6 @@ function wire() {
     }
     closeContextUsagePanel();
   });
-
-  if (typeof wireReleases === "function") {
-    wireReleases();
-  }
 }
 
 let resolveAuthReady;

@@ -11,18 +11,12 @@ logging:
 
 app:
   db-agent:
-    design-docs-path: file:./docs/design
-    releases-path: file:./db/releases
-    deploy-target: test-deploy
     chat-target: chat-readonly
     targets:
       chat-readonly:
         type: mcp
         servers:
           - admission-score
-      test-deploy:
-        type: jdbc
-        schema: emp_test
 
 spring:
   autoconfigure:

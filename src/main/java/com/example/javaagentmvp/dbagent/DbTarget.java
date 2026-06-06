@@ -5,15 +5,10 @@ import java.util.List;
 public record DbTarget(
         TargetType type,
         String server,
-        List<String> servers,
-        String url,
-        String username,
-        String password,
-        String schema) {
+        List<String> servers) {
 
     public enum TargetType {
-        MCP,
-        JDBC
+        MCP
     }
 
     /** MCP target: {@code servers} if set, otherwise single {@code server}. */

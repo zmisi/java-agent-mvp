@@ -11,8 +11,6 @@ COPY java-agent-mvp/.mvn .mvn
 RUN mkdir -p /root/.m2 && cp .mvn/settings.xml /root/.m2/settings.xml
 RUN mvn -B -DskipTests dependency:go-offline
 COPY java-agent-mvp/src src
-COPY java-agent-mvp/docs/design docs/design
-COPY java-agent-mvp/db/releases db/releases
 RUN mvn -B -DskipTests package
 
 FROM ${NODE_IMAGE} AS build-mcp
@@ -32,8 +30,6 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build-java /app/java-agent-mvp/target/java-agent-mvp-*.jar app.jar
-COPY --from=build-java /app/java-agent-mvp/docs/design docs/design
-COPY --from=build-java /app/java-agent-mvp/db/releases db/releases
 COPY --from=build-mcp /app/admission-score-mcp/dist /app/admission-score-mcp/dist
 COPY --from=build-mcp /app/admission-score-mcp/node_modules /app/admission-score-mcp/node_modules
 COPY --from=build-mcp /app/admission-score-mcp/package.json /app/admission-score-mcp/package.json

@@ -4,8 +4,8 @@ package com.example.javaagentmvp.auth;
  * Path-based API authorization for the WeChat mini-program and the admin web UI.
  * <p>
  * Mini-program users ({@link UserRole#GUEST}, {@link UserRole#MEMBER}) may only call
- * auth, conversation, and admission endpoints. Operational endpoints (releases, provisioning,
- * design docs, RAG admin) require {@link UserRole#ADMIN}.
+ * auth, conversation, and admission endpoints. Other /api/* routes require
+ * {@link UserRole#ADMIN}.
  */
 public final class ApiAccessPolicy {
 
