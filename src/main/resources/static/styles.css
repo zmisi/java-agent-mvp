@@ -1500,3 +1500,191 @@ body {
   font-size: var(--font-size-sm);
   line-height: 1.45;
 }
+
+/* Admission result tables (冲/稳/保) */
+.chat-tables {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.chat-table-tier {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  overflow: hidden;
+}
+
+.chat-table-tier-title {
+  margin: 0;
+  padding: 10px 12px;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.chat-table-tier-chong .chat-table-tier-title {
+  color: #e65100;
+}
+
+.chat-table-tier-wen .chat-table-tier-title {
+  color: #1976d2;
+}
+
+.chat-table-tier-bao .chat-table-tier-title {
+  color: #2e7d32;
+}
+
+.chat-table-tier-default .chat-table-tier-title {
+  color: var(--text);
+}
+
+.chat-table-tier-body {
+  padding: 8px;
+}
+
+.chat-table-empty {
+  padding: 16px 12px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+}
+
+.chat-table-school {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.chat-table-school + .chat-table-school {
+  margin-top: 8px;
+}
+
+.chat-table-school-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.chat-table-school-header::-webkit-details-marker {
+  display: none;
+}
+
+.chat-table-school-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.chat-table-school-name {
+  display: block;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.chat-table-school-meta {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.chat-table-school-chevron {
+  width: 8px;
+  height: 8px;
+  border-right: 1.5px solid var(--text-muted);
+  border-bottom: 1.5px solid var(--text-muted);
+  transform: rotate(45deg);
+  transition: transform 0.12s ease;
+  flex-shrink: 0;
+  margin-left: 4px;
+}
+
+.chat-table-school[open] .chat-table-school-chevron {
+  transform: rotate(-135deg);
+  margin-top: 4px;
+}
+
+.major-table-wrap {
+  border-top: 1px solid var(--border-subtle);
+  background: color-mix(in oklab, var(--accent) 6%, var(--bg-elevated));
+  padding-top: 4px;
+}
+
+.chat-table-scroll {
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar) transparent;
+}
+
+.chat-table-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.chat-table-scroll::-webkit-scrollbar-thumb {
+  background: var(--scrollbar);
+  border-radius: 4px;
+}
+
+.chat-table-grid {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+}
+
+.chat-table-grid thead {
+  background: color-mix(in oklab, var(--accent) 8%, var(--bg-elevated));
+}
+
+.chat-table-grid th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 8px 10px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border-subtle);
+  background: color-mix(in oklab, var(--accent) 8%, var(--bg-elevated));
+}
+
+.chat-table-grid td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text);
+  vertical-align: top;
+}
+
+.chat-table-grid tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.chat-table-grid .align-center {
+  text-align: center;
+}
+
+.chat-table-grid .align-left {
+  text-align: left;
+}
+
+.chat-table-grid .nowrap {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-table-grid .wrap {
+  white-space: normal;
+  word-break: break-all;
+}

@@ -826,11 +826,7 @@ async function selectSession(id) {
     const div = document.createElement("div");
     const role = (m.role || "unknown").toLowerCase();
     div.className = `msg ${role}`;
-    const body = role === "assistant" ? renderMarkdown(m.text || "") : escapeHtml(m.text || "");
-    const showRole = role === "tool" || role === "system";
-    div.innerHTML = showRole
-      ? `<div class="role">${escapeHtml(role)}</div><div class="body">${body}</div>`
-      : `<div class="body">${body}</div>`;
+    div.innerHTML = buildMessageHtml(m.role, m.text, m.tables);
     box.appendChild(div);
   }
 
@@ -932,6 +928,170 @@ function resolveRagSourceHref(rawSource) {
     return `/api/rag-docs/open?source=${encodeURIComponent(source)}`;
   }
   return "";
+}
+
+const INDEX_COLUMN_KEY = "_index";
+const MAX_TABLE_BODY_HEIGHT_PX = 280;
+
+const COLUMN_LAYOUT = {
+  [INDEX_COLUMN_KEY]: { minWidthPx: 36, align: "center", wrap: false },
+  university_name: { minWidthPx: 84, align: "left", wrap: false },
+  major_name: { minWidthPx: 120, align: "left", wrap: true },
+  campus: { minWidthPx: 64, align: "left", wrap: false },
+  min_score: { minWidthPx: 48, align: "left", wrap: false },
+  min_rank: { minWidthPx: 56, align: "left", wrap: false },
+  max_score: { minWidthPx: 48, align: "left", wrap: false },
+  year: { minWidthPx: 40, align: "left", wrap: false },
+  subject_group: { minWidthPx: 48, align: "left", wrap: false },
+  admission_type: { minWidthPx: 52, align: "left", wrap: false },
+};
+
+const DEFAULT_COLUMN_LAYOUT = { minWidthPx: 60, align: "left", wrap: false };
+
+function layoutForColumn(key) {
+  return COLUMN_LAYOUT[key] || DEFAULT_COLUMN_LAYOUT;
+}
+
+function buildDisplayColumns(columns) {
+  const indexColumn = {
+    key: INDEX_COLUMN_KEY,
+    label: "序号",
+    ...layoutForColumn(INDEX_COLUMN_KEY),
+  };
+  const dataColumns = (columns || []).map((col) => ({
+    key: col.key,
+    label: col.label,
+    ...layoutForColumn(col.key),
+  }));
+  return [indexColumn, ...dataColumns];
+}
+
+function majorColumnsFromTable(columns) {
+  return buildDisplayColumns((columns || []).filter((col) => col.key !== "university_name"));
+}
+
+function tableBodyScrollHeightPx(rowCount) {
+  return Math.min(Math.max(rowCount * 36, 72), MAX_TABLE_BODY_HEIGHT_PX);
+}
+
+function renderTableCell(col, value) {
+  const wrapCls = col.wrap ? " wrap" : " nowrap";
+  return `<td style="min-width:${col.minWidthPx}px" class="align-${col.align}${wrapCls}">${value}</td>`;
+}
+
+function renderTableGrid(displayColumns, rows) {
+  const tableMinWidth = displayColumns.reduce((sum, col) => sum + col.minWidthPx, 0);
+  const bodyHeight = tableBodyScrollHeightPx(rows.length);
+  const scrollMaxHeight = bodyHeight + 44;
+  const head = displayColumns
+    .map((col) => `<th style="min-width:${col.minWidthPx}px" class="align-${col.align}">${escapeHtml(col.label)}</th>`)
+    .join("");
+  const body = rows
+    .map((row, rowIndex) => {
+      const cells = displayColumns.map((col) => {
+        const value = col.key === INDEX_COLUMN_KEY
+          ? String(rowIndex + 1)
+          : formatTableCell(row[col.key]);
+        return renderTableCell(col, value);
+      }).join("");
+      return `<tr>${cells}</tr>`;
+    })
+    .join("");
+  return `<div class="chat-table-scroll" style="max-height:${scrollMaxHeight}px">
+    <table class="chat-table-grid" style="min-width:${tableMinWidth}px">
+      <thead><tr>${head}</tr></thead>
+      <tbody>${body}</tbody>
+    </table>
+  </div>`;
+}
+
+function formatTableCell(value) {
+  if (value == null || value === "") {
+    return "-";
+  }
+  return escapeHtml(String(value));
+}
+
+function tierKeyFromTitle(title) {
+  if (!title) {
+    return "default";
+  }
+  if (title.startsWith("冲")) {
+    return "chong";
+  }
+  if (title.startsWith("稳")) {
+    return "wen";
+  }
+  if (title.startsWith("保")) {
+    return "bao";
+  }
+  return "default";
+}
+
+function renderSchoolGroup(group, columns) {
+  const majors = group.majors || [];
+  const majorCount = group.majorCount || majors.length;
+  const minScore = group.minScore || "-";
+  const headerMeta = minScore === "-"
+    ? `${majorCount}个专业`
+    : `${majorCount}个专业 · ${minScore}起`;
+  const displayColumns = majorColumnsFromTable(columns);
+  return `<details class="chat-table-school">
+    <summary class="chat-table-school-header">
+      <span class="chat-table-school-main">
+        <span class="chat-table-school-name">${escapeHtml(group.universityName || "未知院校")}</span>
+        <span class="chat-table-school-meta">${escapeHtml(headerMeta)}</span>
+      </span>
+      <span class="chat-table-school-chevron" aria-hidden="true"></span>
+    </summary>
+    <div class="major-table-wrap">
+      ${renderTableGrid(displayColumns, majors)}
+    </div>
+  </details>`;
+}
+
+function renderFlatChatTable(table) {
+  const displayColumns = buildDisplayColumns(table.columns || []);
+  const rows = table.rows || [];
+  if (displayColumns.length <= 1 || rows.length === 0) {
+    return "";
+  }
+  return renderTableGrid(displayColumns, rows);
+}
+
+function renderChatTable(table) {
+  const tier = tierKeyFromTitle(table.title);
+  const groups = table.groups || [];
+  const rows = table.rows || [];
+  const isEmpty = groups.length === 0 && rows.length === 0;
+  let body = "";
+  if (isEmpty) {
+    body = `<div class="chat-table-empty">暂无匹配专业</div>`;
+  } else if (groups.length > 0) {
+    body = groups.map((group) => renderSchoolGroup(group, table.columns || [])).join("");
+  } else {
+    body = renderFlatChatTable(table);
+  }
+  return `<section class="chat-table-tier chat-table-tier-${tier}">
+    <h4 class="chat-table-tier-title">${escapeHtml(table.title || "查询结果")}</h4>
+    <div class="chat-table-tier-body">${body}</div>
+  </section>`;
+}
+
+function formatChatTables(tables) {
+  if (!tables || tables.length === 0) {
+    return "";
+  }
+  return `<div class="chat-tables">${tables.map(renderChatTable).join("")}</div>`;
+}
+
+function buildMessageHtml(role, text, tables) {
+  const normalizedRole = (role || "unknown").toLowerCase();
+  const body = normalizedRole === "assistant" ? renderMarkdown(text || "") : escapeHtml(text || "");
+  const showRole = normalizedRole === "tool" || normalizedRole === "system";
+  const tablesHtml = normalizedRole === "assistant" ? formatChatTables(tables) : "";
+  const roleHtml = showRole ? `<div class="role">${escapeHtml(normalizedRole)}</div>` : "";
+  return `${roleHtml}<div class="body">${body}${tablesHtml}</div>`;
 }
 
 function formatRagSources(sources) {
