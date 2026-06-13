@@ -220,6 +220,33 @@ AGENT_UI_DB_USER=agent AGENT_UI_DB_PASSWORD=agent \
 
 Web UI 支持：左侧会话 `…` 菜单（重命名 / 删除）、左下角**设置**（深色 / 浅色 / 跟随系统、字体大小，保存在浏览器 `localStorage`）、输入框左侧 **Context** 圆环（最后一次发送后估计的输入上下文占用与分类分解）。
 
+## Workflow API（admission-workflow）
+
+显式 Workflow Runtime，同步执行「志愿分析报告」链路，每步写入 DB checkpoint（`agent_ui.workflow_run` / `workflow_checkpoint`）。开关：`app.admission-workflow.enabled=true`。
+
+节点链：`intent_classify → score_tool → filter_score_majors → policy_rag → verify_answer → format_response → synthesize_report`
+
+`score_tool` 与 Chat MCP 一致：用 **用户分 + 15** 调用 `getMajorByScore`（MCP 返回 `min_score <= 查询分`），再在 `filter_score_majors` 按用户真实分划分冲（+15 内）/ 稳（至用户分）/ 保（-15 及以下）。
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/workflows/report` | body `{"message":"...","conversationId":"可选"}`；同步返回 `runId`、`status`、`result`、`assistant`（LLM 报告正文）、`tables`（冲/稳/保表格）、`sources`（政策来源）、`checkpoints` |
+| GET | `/api/workflows/{runId}` | 查询 run 状态与 checkpoint 摘要 |
+| GET | `/api/workflows/{runId}/checkpoints` | 查询全部 checkpoint（含 input/output JSON，用于演示 resume） |
+
+示例：
+
+```bash
+curl -X POST http://localhost:8080/api/workflows/report \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"message":"安徽物理类620分，合工大计算机和软件工程政策"}'
+```
+
+微信小程序用户（guest/member）可访问 `/api/workflows/*`；需 JWT 鉴权。
+
+Web UI 与微信小程序 Composer 均提供 **「志愿报告」** 按钮：调用 `POST /api/workflows/report` 生成结构化报告（表格 + 政策来源 + LLM 叙述）；普通发送仍走 `/api/conversations/{id}/chat`。
+
 ## 故障排查
 
 - **MyBatis 启动失败、指向已删除的 `*Mapper.xml`**：源码已删但 `target/classes/mapper/` 仍有旧文件。执行 `mvn clean spring-boot:run`（或 `mvn clean package` 后再启动）。

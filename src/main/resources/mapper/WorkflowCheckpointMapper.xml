@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.javaagentmvp.admissionworkflow.persistence.mapper.WorkflowCheckpointMapper">
+
+    <insert id="insert">
+        INSERT INTO agent_ui.workflow_checkpoint (
+            run_id, node_name, sequence_no, status, input_json, output_json, started_at, finished_at
+        )
+        VALUES (
+            #{runId}::uuid,
+            #{nodeName},
+            #{sequenceNo},
+            #{status},
+            #{inputJson}::jsonb,
+            #{outputJson}::jsonb,
+            #{startedAt},
+            #{finishedAt}
+        )
+    </insert>
+
+    <select id="listByRunId" resultType="com.example.javaagentmvp.admissionworkflow.persistence.model.WorkflowCheckpointRecord">
+        SELECT id,
+               run_id AS runId,
+               node_name AS nodeName,
+               sequence_no AS sequenceNo,
+               status,
+               input_json::text AS inputJson,
+               output_json::text AS outputJson,
+               started_at AS startedAt,
+               finished_at AS finishedAt
+        FROM agent_ui.workflow_checkpoint
+        WHERE run_id = #{runId}::uuid
+        ORDER BY sequence_no ASC, id ASC
+    </select>
+
+</mapper>

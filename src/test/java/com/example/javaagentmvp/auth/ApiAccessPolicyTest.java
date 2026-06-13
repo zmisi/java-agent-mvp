@@ -12,6 +12,7 @@ class ApiAccessPolicyTest {
         assertThat(ApiAccessPolicy.isAllowed(UserRole.GUEST, "/api/conversations")).isTrue();
         assertThat(ApiAccessPolicy.isAllowed(UserRole.GUEST, "/api/conversations/abc/chat")).isTrue();
         assertThat(ApiAccessPolicy.isAllowed(UserRole.GUEST, "/api/admission/query")).isTrue();
+        assertThat(ApiAccessPolicy.isAllowed(UserRole.GUEST, "/api/workflows/report")).isTrue();
         assertThat(ApiAccessPolicy.isAllowed(UserRole.GUEST, "/api/admin/users")).isFalse();
     }
 

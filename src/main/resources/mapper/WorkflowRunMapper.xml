@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.javaagentmvp.admissionworkflow.persistence.mapper.WorkflowRunMapper">
+
+    <insert id="insert">
+        INSERT INTO agent_ui.workflow_run (
+            id, workflow_type, status, user_id, conversation_id, input_message,
+            result_json, error_message, created_at, updated_at, finished_at
+        )
+        VALUES (
+            #{id}::uuid,
+            #{workflowType},
+            #{status},
+            #{userId},
+            #{conversationId},
+            #{inputMessage},
+            #{resultJson}::jsonb,
+            #{errorMessage},
+            #{createdAt},
+            #{updatedAt},
+            #{finishedAt}
+        )
+    </insert>
+
+    <update id="updateStatus">
+        UPDATE agent_ui.workflow_run
+        SET status = #{status},
+            updated_at = #{updatedAt},
+            finished_at = #{finishedAt},
+            error_message = #{errorMessage}
+        WHERE id = #{id}::uuid
+    </update>
+
+    <update id="updateResult">
+        UPDATE agent_ui.workflow_run
+        SET status = #{status},
+            result_json = #{resultJson}::jsonb,
+            updated_at = #{updatedAt},
+            finished_at = #{finishedAt},
+            error_message = NULL
+        WHERE id = #{id}::uuid
+    </update>
+
+    <select id="selectSummaryById" resultType="com.example.javaagentmvp.admissionworkflow.persistence.model.WorkflowRunSummaryRow">
+        SELECT r.id,
+               r.workflow_type AS workflowType,
+               r.status,
+               r.user_id AS userId,
+               r.conversation_id AS conversationId,
+               r.input_message AS inputMessage,
+               r.result_json::text AS resultJson,
+               r.error_message AS errorMessage,
+               r.created_at AS createdAt,
+               r.updated_at AS updatedAt,
+               r.finished_at AS finishedAt,
+               (SELECT COUNT(*)::int FROM agent_ui.workflow_checkpoint c WHERE c.run_id = r.id) AS checkpointCount
+        FROM agent_ui.workflow_run r
+        WHERE r.id = #{id}::uuid
+    </select>
+
+    <select id="countByIdAndUserId" resultType="int">
+        SELECT COUNT(*)::int
+        FROM agent_ui.workflow_run
+        WHERE id = #{id}::uuid
+          AND user_id = #{userId}
+    </select>
+
+</mapper>

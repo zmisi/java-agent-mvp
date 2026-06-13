@@ -131,6 +131,15 @@ app:
       # auto | pgroonga | postgres-fts
       lexical-engine: auto
       fts-dictionary: simple
+  admission-workflow:
+    enabled: true
+    default-workflow-type: admission_report
+    log-checkpoints: true
+    synthesis:
+      enabled: true
+      prompt-location: classpath:prompts/admission-report-synthesis.md
+      temperature: 0.3
+      fallback-to-summary-on-failure: true
 
 logging:
   level:
@@ -141,6 +150,8 @@ logging:
     com.example.javaagentmvp.rag.RagFlowLoggingAdvisor: INFO
     com.example.javaagentmvp.rag.RagFlowStartAdvisor: INFO
     com.example.javaagentmvp.rag.RagRetrievalService: INFO
+    com.example.javaagentmvp.admissionworkflow.tool.AdmissionScoreToolClient: INFO
+    com.example.javaagentmvp.admissionworkflow.engine.WorkflowEngine: INFO
     com.example.javaagentmvp.QwenApiLoggingAdvisor: INFO
     com.alibaba.cloud.ai.dashscope: DEBUG
     com.alibaba.cloud.ai.dashscope.api: DEBUG
@@ -153,7 +164,7 @@ logging:
 
 mybatis:
   mapper-locations: classpath:mapper/**/*.xml
-  type-aliases-package: com.example.javaagentmvp.chat.persistence.model
+  type-aliases-package: com.example.javaagentmvp.chat.persistence.model,com.example.javaagentmvp.admissionworkflow.persistence.model
   configuration:
     map-underscore-to-camel-case: true
 

@@ -41,7 +41,8 @@ public final class ApiAccessPolicy {
         return path.startsWith("/api/auth/")
                 || path.startsWith("/api/conversations/")
                 || path.equals("/api/conversations")
-                || path.startsWith("/api/admission/");
+                || path.startsWith("/api/admission/")
+                || path.startsWith("/api/workflows/");
     }
 
     private static String normalize(String uri) {
