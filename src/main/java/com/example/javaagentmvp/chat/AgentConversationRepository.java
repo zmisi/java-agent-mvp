@@ -31,10 +31,7 @@ public class AgentConversationRepository {
         return conversationMapper.countById(id) > 0;
     }
 
-    public boolean existsForUser(String id, long userId, boolean adminBypass) {
-        if (adminBypass) {
-            return exists(id);
-        }
+    public boolean existsForUser(String id, long userId) {
         return conversationMapper.countByIdAndUserId(id, userId) > 0;
     }
 
@@ -63,11 +60,8 @@ public class AgentConversationRepository {
         conversationMapper.deleteById(id, scope.scopeByUser(), scope.userId());
     }
 
-    public List<ConversationSummary> listSummaries(long userId, boolean adminBypass) {
-        List<ConversationSummaryRow> rows = adminBypass
-                ? conversationMapper.listSummaries()
-                : conversationMapper.listSummariesByUserId(userId);
-        return rows.stream()
+    public List<ConversationSummary> listSummaries(long userId) {
+        return conversationMapper.listSummariesByUserId(userId).stream()
                 .map(AgentConversationRepository::toSummary)
                 .toList();
     }

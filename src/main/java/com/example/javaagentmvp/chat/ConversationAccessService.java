@@ -1,7 +1,6 @@
 package com.example.javaagentmvp.chat;
 
 import com.example.javaagentmvp.auth.AuthenticatedUser;
-import com.example.javaagentmvp.auth.UserRole;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -16,7 +15,7 @@ public class ConversationAccessService {
     }
 
     public void requireAccess(String conversationId, AuthenticatedUser user) {
-        if (!conversationRepository.existsForUser(conversationId, user.userId(), user.role() == UserRole.ADMIN)) {
+        if (!conversationRepository.existsForUser(conversationId, user.userId())) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "conversation not found");
         }
     }

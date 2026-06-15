@@ -2,7 +2,6 @@ package com.example.javaagentmvp.web;
 
 import com.example.javaagentmvp.auth.AuthRequestSupport;
 import com.example.javaagentmvp.auth.AuthenticatedUser;
-import com.example.javaagentmvp.auth.UserRole;
 import com.example.javaagentmvp.chat.AgentConversationRepository;
 import com.example.javaagentmvp.chat.ConversationAccessService;
 import com.example.javaagentmvp.chat.PostgresChatMemory;
@@ -42,7 +41,7 @@ public class ConversationController {
     @GetMapping
     public List<ConversationSummaryDto> list(HttpServletRequest request) {
         AuthenticatedUser user = AuthRequestSupport.requireUser(request);
-        return conversationRepository.listSummaries(user.userId(), user.role() == UserRole.ADMIN).stream()
+        return conversationRepository.listSummaries(user.userId()).stream()
                 .map(s -> new ConversationSummaryDto(s.id(), s.title(), s.createdAt(), s.updatedAt()))
                 .toList();
     }
@@ -80,7 +79,7 @@ public class ConversationController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "title too long");
         }
         Instant now = Instant.now();
-        conversationRepository.updateTitle(conversationId, title, now, ownerScope(user));
+        conversationRepository.updateTitle(conversationId, title, now, user.userId());
         return new ConversationSummaryDto(conversationId, title, null, now.toString());
     }
 
@@ -88,18 +87,14 @@ public class ConversationController {
     public void delete(@PathVariable String conversationId, HttpServletRequest request) {
         AuthenticatedUser user = AuthRequestSupport.requireUser(request);
         conversationAccess.requireAccess(conversationId, user);
-        conversationRepository.delete(conversationId, ownerScope(user));
+        conversationRepository.delete(conversationId, user.userId());
     }
 
     @PostMapping("/{conversationId}/archive")
     public void archive(@PathVariable String conversationId, HttpServletRequest request) {
         AuthenticatedUser user = AuthRequestSupport.requireUser(request);
         conversationAccess.requireAccess(conversationId, user);
-        conversationRepository.archive(conversationId, Instant.now(), ownerScope(user));
-    }
-
-    private static Long ownerScope(AuthenticatedUser user) {
-        return user.role() == UserRole.ADMIN ? null : user.userId();
+        conversationRepository.archive(conversationId, Instant.now(), user.userId());
     }
 
     public record ConversationSummaryDto(String id, String title, String createdAt, String updatedAt) {

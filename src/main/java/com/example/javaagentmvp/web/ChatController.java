@@ -159,7 +159,7 @@ public class ChatController {
                 ? conversationCompactionService.compact(conversationId)
                 : conversationCompactionService.preview(conversationId);
         if (persist) {
-            conversationRepository.touchUpdatedAt(conversationId, Instant.now(), ownerScope(user));
+            conversationRepository.touchUpdatedAt(conversationId, Instant.now(), user.userId());
         }
         return new CompactReplyDto(
                 result.summary(),
@@ -186,13 +186,8 @@ public class ChatController {
 
     private void touchConversation(String conversationId, String message, AuthenticatedUser user) {
         Instant now = Instant.now();
-        Long ownerScope = ownerScope(user);
-        conversationRepository.touchUpdatedAt(conversationId, now, ownerScope);
-        conversationRepository.updateTitleIfDefault(conversationId, trimTitle(message), now, ownerScope);
-    }
-
-    private static Long ownerScope(AuthenticatedUser user) {
-        return user.role() == UserRole.ADMIN ? null : user.userId();
+        conversationRepository.touchUpdatedAt(conversationId, now, user.userId());
+        conversationRepository.updateTitleIfDefault(conversationId, trimTitle(message), now, user.userId());
     }
 
     private static String trimTitle(String input) {
