@@ -10,6 +10,12 @@ logging:
     org.springframework.web.client.RestClient: INFO
 
 app:
+  admission-workflow:
+    async:
+      enabled: true
+      queue-key: admission-workflow:jobs
+      consumer-enabled: true
+      brpop-timeout-seconds: 5
   db-agent:
     chat-target: chat-readonly
     targets:
@@ -23,6 +29,10 @@ spring:
     exclude:
       - org.springframework.ai.model.ollama.autoconfigure.OllamaChatAutoConfiguration
       - org.springframework.ai.model.ollama.autoconfigure.OllamaEmbeddingAutoConfiguration
+  data:
+    redis:
+      host: redis
+      port: 6379
   datasource:
     url: jdbc:postgresql://postgres:5432/employees
     username: agent

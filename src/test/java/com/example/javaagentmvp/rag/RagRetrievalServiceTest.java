@@ -1,6 +1,9 @@
 package com.example.javaagentmvp.rag;
 
+import com.example.javaagentmvp.observability.AgentMetrics;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import io.micrometer.observation.ObservationRegistry;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.ai.document.Document;
@@ -34,7 +37,12 @@ class RagRetrievalServiceTest {
                 new Document("score", Map.of("source", "rag-docs/hfut/scores/2025/安徽/分数.md", "distance", 0.25))));
 
         RagRetrievalService service = new RagRetrievalService(
-                vectorStore, jdbcTemplate, new ObjectMapper(), testProperties());
+                vectorStore,
+                jdbcTemplate,
+                new ObjectMapper(),
+                testProperties(),
+                new AgentMetrics(new SimpleMeterRegistry()),
+                ObservationRegistry.create());
 
         List<Document> documents = service.search(
                 "仅合肥工业大学",

@@ -1,5 +1,7 @@
 package com.example.javaagentmvp.rag;
 
+import com.example.javaagentmvp.observability.AgentMetrics;
+import com.example.javaagentmvp.observability.TraceResponseFilter;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -46,18 +48,40 @@ public class RagRetrievalService {
 
     private final RagProperties ragProperties;
 
+    private final AgentMetrics agentMetrics;
+
+    private final io.micrometer.observation.ObservationRegistry observationRegistry;
+
     public RagRetrievalService(
             VectorStore ragVectorStore,
             JdbcTemplate jdbcTemplate,
             ObjectMapper objectMapper,
-            RagProperties ragProperties) {
+            RagProperties ragProperties,
+            AgentMetrics agentMetrics,
+            io.micrometer.observation.ObservationRegistry observationRegistry) {
         this.vectorStore = ragVectorStore;
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
         this.ragProperties = ragProperties;
+        this.agentMetrics = agentMetrics;
+        this.observationRegistry = observationRegistry;
     }
 
     public List<Document> search(String message, List<String> priorUserMessages, List<String> priorContextHints) {
+        long startedAt = System.nanoTime();
+        String mode = ragProperties.hybrid().enabled() ? "hybrid" : "vector-only";
+        List<Document> documents = TraceResponseFilter.observe(
+                observationRegistry,
+                "agent.rag.retrieve",
+                mode,
+                () -> searchInternal(message, priorUserMessages, priorContextHints));
+        long elapsedMs = (System.nanoTime() - startedAt) / 1_000_000;
+        agentMetrics.recordRagRetrieve(mode, elapsedMs, documents.size());
+        return documents;
+    }
+
+    private List<Document> searchInternal(
+            String message, List<String> priorUserMessages, List<String> priorContextHints) {
         String flowId = RagFlowContext.flowId();
         String normalized = message == null ? "" : message.strip();
         List<String> priorTurns = priorUserMessages == null ? List.of() : priorUserMessages;

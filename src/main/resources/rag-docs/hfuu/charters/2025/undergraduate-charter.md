@@ -4,7 +4,7 @@ university_code: HFUU
 doc_type: admission_charters
 year: 2025
 source_url: https://www.ms315.com/html/20250513/202505131402231.htm
-fetched_at: 2026-05-27T04:33:03+00:00
+fetched_at: 2026-06-03T01:55:50+00:00
 ---
 
 # 合肥大学2025年本科招生章程（含艺术类）

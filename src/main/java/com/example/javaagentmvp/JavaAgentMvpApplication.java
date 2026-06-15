@@ -14,7 +14,8 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 })
 @MapperScan({
         "com.example.javaagentmvp.chat.persistence.mapper",
-        "com.example.javaagentmvp.auth.persistence.mapper"
+        "com.example.javaagentmvp.auth.persistence.mapper",
+        "com.example.javaagentmvp.admissionworkflow.persistence.mapper"
 })
 public class JavaAgentMvpApplication {
 

@@ -4,7 +4,7 @@ university_code: HFUU
 doc_type: admission_plans
 year: 2025
 source_url: https://www.hfuu.edu.cn/zs/1e/2a/c2999a138794/page.htm
-fetched_at: 2026-05-27T04:32:44+00:00
+fetched_at: 2026-06-03T01:55:36+00:00
 ---
 
 # 合肥大学2025年安徽省专项分专业招生计划（物理类）（安徽省院校代码9015）

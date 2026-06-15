@@ -1,5 +1,8 @@
 package com.example.javaagentmvp.rag;
 
+import com.example.javaagentmvp.admissionworkflow.intent.AdmissionIntent;
+import com.example.javaagentmvp.admissionworkflow.intent.ConversationTurnResolver;
+import com.example.javaagentmvp.admissionworkflow.intent.ResolvedTurn;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.document.Document;
@@ -18,12 +21,15 @@ public class RagQueryRouter {
 
     private final RagProperties ragProperties;
 
+    private final ConversationTurnResolver turnResolver;
+
     private final List<Pattern> ragPatterns;
 
     private final List<Pattern> databasePatterns;
 
-    public RagQueryRouter(RagProperties ragProperties) {
+    public RagQueryRouter(RagProperties ragProperties, ConversationTurnResolver turnResolver) {
         this.ragProperties = ragProperties;
+        this.turnResolver = turnResolver;
         this.ragPatterns = compilePatterns(ragProperties.routing().ragPatterns(), "rag-patterns");
         this.databasePatterns = compilePatterns(ragProperties.routing().databasePatterns(), "database-patterns");
         log.info("RAG routing loaded: {} rag pattern(s), {} database pattern(s)",
@@ -35,24 +41,32 @@ public class RagQueryRouter {
     }
 
     public Decision decide(String message, List<String> priorUserMessages, List<String> priorContextHints) {
+        ResolvedTurn resolved = turnResolver.resolve(message, priorUserMessages, priorContextHints);
+        return decide(resolved, message);
+    }
+
+    public Decision decide(ResolvedTurn resolved, String rawMessage) {
         if (!ragProperties.enabled()) {
             return Decision.skip("RAG disabled");
         }
-        String normalized = message == null ? "" : message.strip();
+        String normalized = rawMessage == null ? "" : rawMessage.strip();
         if (normalized.isEmpty()) {
             return Decision.skip("empty message");
         }
 
         if (ragProperties.routeDatabaseQueries() && matchesPatterns(normalized, databasePatterns)) {
-            return Decision.skip("structured query — use MCP tools (SQL or getMajorByScore)");
+            return Decision.skip("structured query — use MCP tools (SQL, getMajorByScore, or getRankByScore)");
         }
 
-        if (isScoreMajorAdmissionQuery(normalized)) {
-            return Decision.skip("score/major admission query — use MCP getMajorByScore");
+        AdmissionIntent intent = resolved == null ? AdmissionIntent.UNKNOWN : resolved.intent();
+        if (intent == AdmissionIntent.RANK) {
+            return Decision.skip("resolved intent RANK — use MCP getRankByScore");
         }
-
-        if (isScoreQueryFollowUp(normalized, priorUserMessages, priorContextHints)) {
-            return Decision.skip("score query follow-up — use MCP getMajorByScore");
+        if (intent == AdmissionIntent.SCORE) {
+            return Decision.skip("resolved intent SCORE — use MCP getMajorByScore");
+        }
+        if (intent == AdmissionIntent.POLICY) {
+            return Decision.use("resolved intent POLICY — use RAG knowledge base");
         }
 
         if (matchesPatterns(normalized, ragPatterns)) {
@@ -61,99 +75,6 @@ public class RagQueryRouter {
 
         return Decision.retrieve("ambiguous — retrieve then score");
     }
-
-    /**
-     * User is supplying province / subject / year / batch after a prior score-to-major question
-     * (or after the assistant asked for those fields). Route to MCP, not RAG.
-     */
-    private boolean isScoreQueryFollowUp(
-            String current,
-            List<String> priorUserMessages,
-            List<String> priorContextHints) {
-        if (matchesPatterns(current, ragPatterns)) {
-            return false;
-        }
-        if (!hasPriorScoreQueryIntent(priorUserMessages, priorContextHints)) {
-            return false;
-        }
-        return looksLikeAdmissionParameters(current);
-    }
-
-    private boolean hasPriorScoreQueryIntent(List<String> priorUserMessages, List<String> priorContextHints) {
-        if (priorUserMessages != null) {
-            for (String prior : priorUserMessages) {
-                if (prior != null && isScoreMajorQuery(prior)) {
-                    return true;
-                }
-            }
-        }
-        if (priorContextHints != null) {
-            for (String hint : priorContextHints) {
-                if (hint != null && assistantAskingForScoreParams(hint)) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    private static boolean isScoreMajorQuery(String message) {
-        String normalized = message.strip();
-        if (!containsAdmissionScore(normalized)) {
-            return false;
-        }
-        return MAJOR_QUERY_HINT.matcher(normalized).find();
-    }
-
-    /** e.g. 安徽 2025 物理 普通批 630 可以报考什么专业？ (score without 分 suffix) */
-    private static boolean isScoreMajorAdmissionQuery(String message) {
-        if (!containsAdmissionScore(message)) {
-            return false;
-        }
-        if (MAJOR_QUERY_HINT.matcher(message).find()) {
-            return true;
-        }
-        if (ADMISSION_PARAMS.matcher(message).find() || SUBJECT_TRACK.matcher(message).find()) {
-            return PROVINCE_PATTERN.matcher(message).find() || YEAR_PATTERN.matcher(message).find();
-        }
-        return false;
-    }
-
-    private static boolean containsAdmissionScore(String message) {
-        java.util.regex.Matcher matcher = SCORE_NUMBER.matcher(message);
-        while (matcher.find()) {
-            int score = Integer.parseInt(matcher.group(1));
-            if (score >= 300 && score <= 750) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static boolean assistantAskingForScoreParams(String text) {
-        return ASSISTANT_ASKING_PARAMS.matcher(text).find();
-    }
-
-    private static boolean looksLikeAdmissionParameters(String message) {
-        String normalized = message.strip();
-        boolean hasSubjectOrBatch = ADMISSION_PARAMS.matcher(normalized).find();
-        boolean hasProvince = PROVINCE_PATTERN.matcher(normalized).find();
-        boolean hasYear = YEAR_PATTERN.matcher(normalized).find();
-        return hasSubjectOrBatch || (hasProvince && (hasYear || hasSubjectOrBatch))
-                || (hasProvince && normalized.length() <= 40);
-    }
-
-    private static final Pattern SCORE_NUMBER = Pattern.compile("(?<!\\d)(\\d{3,4})(?!\\d)(?!\\.\\d)");
-    private static final Pattern MAJOR_QUERY_HINT = Pattern.compile(
-            "专业|报考|报志愿|志愿|可报|能上|录取|哪些|什么专业|报什么|什么学校|哪些学校|院校");
-    private static final Pattern ADMISSION_PARAMS = Pattern.compile(
-            "物理类|历史类|普通批|国家专项|地方专项|中外合作");
-    private static final Pattern SUBJECT_TRACK = Pattern.compile("物理(类|方向)?|历史(类|方向)?");
-    private static final Pattern ASSISTANT_ASKING_PARAMS = Pattern.compile(
-            "省份|科类|物理类|历史类|所在省|提供.*省|getMajorByScore");
-    private static final Pattern YEAR_PATTERN = Pattern.compile("\\b20\\d{2}\\b");
-    private static final Pattern PROVINCE_PATTERN = Pattern.compile(
-            "安徽|北京|上海|天津|重庆|河北|山西|辽宁|吉林|黑龙江|江苏|浙江|福建|江西|山东|河南|湖北|湖南|广东|海南|四川|贵州|云南|陕西|甘肃|青海|内蒙古|广西|西藏|宁夏|新疆");
 
     public Decision afterRetrieval(Decision preliminary, List<Document> documents) {
         if (!preliminary.shouldRetrieve()) {

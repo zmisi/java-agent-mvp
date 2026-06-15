@@ -1,5 +1,10 @@
 package com.example.javaagentmvp.rag;
 
+import com.example.javaagentmvp.admissionworkflow.intent.AdmissionInputParser;
+import com.example.javaagentmvp.admissionworkflow.intent.AdmissionIntent;
+import com.example.javaagentmvp.admissionworkflow.intent.ConversationTurnResolver;
+import com.example.javaagentmvp.admissionworkflow.intent.ResolvedTurn;
+import com.example.javaagentmvp.admissionworkflow.intent.SlotDelta;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -27,7 +32,9 @@ class RagQueryRouterTest {
             "(专业|报考|报志愿|志愿|可报|能上|录取)[\\s\\S]{0,60}\\d{3,4}\\s*分",
             "(多少|几分|考了|高考)\\s*\\d{3,4}\\s*分[\\s\\S]{0,40}(专业|学校|院校|报|志愿)");
 
-    private final RagQueryRouter router = new RagQueryRouter(testProperties());
+    private final ConversationTurnResolver turnResolver = new ConversationTurnResolver();
+
+    private final RagQueryRouter router = new RagQueryRouter(testProperties(), turnResolver);
 
     private static RagProperties testProperties() {
         return new RagProperties(
@@ -76,6 +83,13 @@ class RagQueryRouterTest {
     }
 
     @Test
+    void skipsRagForScoreRankQueries() {
+        RagQueryRouter.Decision decision = router.decide("安徽物理类620分排名多少");
+        assertFalse(decision.useRag());
+        assertFalse(decision.shouldRetrieve());
+    }
+
+    @Test
     void skipsRagForScoreWithoutFenSuffix() {
         RagQueryRouter.Decision decision = router.decide("安徽 2025 物理 普通批 630 可以报考什么专业？");
         assertFalse(decision.useRag());
@@ -90,6 +104,18 @@ class RagQueryRouterTest {
     }
 
     @Test
+    void usesRagForResolvedPolicyIntent() {
+        RagQueryRouter.Decision decision = router.decide(
+                new ResolvedTurn(
+                        AdmissionIntent.POLICY,
+                        AdmissionInputParser.parse("合工大转专业政策"),
+                        SlotDelta.NONE,
+                        false),
+                "合工大转专业政策");
+        assertTrue(decision.useRag());
+    }
+
+    @Test
     void usesRagForAdmissionsBrochureQuestions() {
         RagQueryRouter.Decision decision = router.decide("合工大2025年招生章程有哪些录取规则");
         assertTrue(decision.useRag());
@@ -101,6 +127,26 @@ class RagQueryRouterTest {
                 "安徽，物理类， 2025， 普通批",
                 List.of("630分可以报考什么专业"),
                 List.of("请提供您的所在省份和科类（物理类/历史类），以便查询630分可报考的专业。"));
+        assertFalse(decision.useRag());
+        assertFalse(decision.shouldRetrieve());
+    }
+
+    @Test
+    void skipsRagForRankQueryProvinceFollowUp() {
+        RagQueryRouter.Decision decision = router.decide(
+                "浙江呢？",
+                List.of("600分在安徽省的排名"),
+                List.of("rank-result-table 位次 一分一段"));
+        assertFalse(decision.useRag());
+        assertFalse(decision.shouldRetrieve());
+    }
+
+    @Test
+    void skipsRagForRankQueryScoreFollowUp() {
+        RagQueryRouter.Decision decision = router.decide(
+                "620分呢？",
+                List.of("600分在安徽省的排名"),
+                List.of("rank-result-table"));
         assertFalse(decision.useRag());
         assertFalse(decision.shouldRetrieve());
     }

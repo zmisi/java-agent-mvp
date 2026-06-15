@@ -29,6 +29,13 @@ const LOADING_HINTS = [
   "Still working — click Stop to cancel",
 ];
 
+const WORKFLOW_LOADING_HINTS = [
+  "正在生成志愿报告…",
+  "正在查询分数与政策数据…",
+  "正在调用模型撰写报告，请稍候…",
+  "报告生成中 — 可点击 Stop 取消",
+];
+
 const defaultSettings = () => ({
   theme: "system",
   fontSize: 14,
@@ -390,6 +397,7 @@ function setComposerState(hasSession) {
     ? "Ask about the database or docs… (⌘+Enter to send)"
     : "Select a chat on the left, or click New Chat";
   setCompactionButtonsState(hasSession && !isEmptySession, false);
+  refreshWorkflowReportButtonState(false);
   if (!hasSession) {
     setSessionEmptyState(false);
   } else {
@@ -418,6 +426,7 @@ function setSessionEmptyState(isEmpty) {
   box.dataset.sessionEmpty = isEmpty ? "true" : "false";
   setComposerCentered(isEmpty);
   setCompactionButtonsState(!!state.activeId && !isEmpty, state.inFlight);
+  refreshWorkflowReportButtonState(state.inFlight);
 }
 
 function setComposerBusy(busy) {
@@ -433,6 +442,49 @@ function setComposerBusy(busy) {
     setComposerState(!!state.activeId);
   }
   setCompactionButtonsState(!!state.activeId && !isCurrentSessionEmpty(), busy);
+  refreshWorkflowReportButtonState(busy);
+}
+
+function getLastUserMessageText() {
+  const userMessages = $("messages")?.querySelectorAll(".msg.user .body");
+  if (!userMessages || userMessages.length === 0) {
+    return "";
+  }
+  return (userMessages[userMessages.length - 1].textContent || "").trim();
+}
+
+function canRunWorkflowReport(hasSession) {
+  if (!hasSession) {
+    return false;
+  }
+  if ($("input").value.trim().length > 0) {
+    return true;
+  }
+  return getLastUserMessageText().length > 0;
+}
+
+function resolveWorkflowReportMessage() {
+  const inputText = $("input").value.trim();
+  if (inputText) {
+    return { text: inputText, fromInput: true };
+  }
+  const lastUser = getLastUserMessageText();
+  if (lastUser) {
+    return { text: lastUser, fromInput: false };
+  }
+  return null;
+}
+
+function refreshWorkflowReportButtonState(busy) {
+  const btn = $("workflowReportBtn");
+  if (!btn) {
+    return;
+  }
+  btn.disabled = !canRunWorkflowReport(!!state.activeId) || busy;
+}
+
+function setWorkflowReportButtonState(_hasSession, _hasText, busy) {
+  refreshWorkflowReportButtonState(busy);
 }
 
 function setCompactionButtonsState(hasSession, busy) {
@@ -566,9 +618,14 @@ function formatElapsed(ms) {
   return `${min}m ${rem}s`;
 }
 
-function showLoadingBubble() {
+function showLoadingBubble(hints) {
   removeLoadingBubble();
   clearMessagesEmpty();
+
+  const loadingHints = hints && hints.length > 0 ? hints : LOADING_HINTS;
+  const loadingHint = loadingHints === WORKFLOW_LOADING_HINTS
+    ? "Workflow may query score data and call the model"
+    : "The model may query the database multiple times";
 
   const div = document.createElement("div");
   div.className = "msg assistant msg-loading";
@@ -577,10 +634,10 @@ function showLoadingBubble() {
     <div class="loading-card">
       <div class="loading-row">
         <span class="loading-dots" aria-hidden="true"><span></span><span></span><span></span></span>
-        <span class="loading-text" id="loadingStatus">${LOADING_HINTS[0]}</span>
+        <span class="loading-text" id="loadingStatus">${loadingHints[0]}</span>
       </div>
       <span class="loading-elapsed" id="loadingElapsed">Elapsed 0s</span>
-      <span class="loading-hint">The model may query the database multiple times</span>
+      <span class="loading-hint">${loadingHint}</span>
     </div>
   `;
   $("messages").appendChild(div);
@@ -597,10 +654,10 @@ function showLoadingBubble() {
     if (el) {
       el.textContent = `Elapsed ${formatElapsed(elapsed)}`;
     }
-    hintIndex = Math.min(LOADING_HINTS.length - 1, Math.floor(elapsed / 4000));
+    hintIndex = Math.min(loadingHints.length - 1, Math.floor(elapsed / 4000));
     const st = statusEl();
     if (st) {
-      st.textContent = LOADING_HINTS[hintIndex];
+      st.textContent = loadingHints[hintIndex];
     }
     scrollMessagesToBottom();
   }, 500);
@@ -815,8 +872,9 @@ async function selectSession(id) {
     setSessionEmptyState(true);
     const empty = document.createElement("div");
     empty.className = "messages-empty";
-    empty.textContent = "Ask about the database or docs, e.g. RAG 和微调有什么区别？";
+    empty.textContent = "输入问题开始对话，或在下方点击「志愿报告」生成分析报告，例如：安徽物理类620分合工大计算机和软件工程政策";
     box.appendChild(empty);
+    refreshWorkflowReportButtonState(state.inFlight);
     return;
   }
 
@@ -831,6 +889,7 @@ async function selectSession(id) {
   }
 
   box.scrollTop = box.scrollHeight;
+  refreshWorkflowReportButtonState(state.inFlight);
 }
 
 async function createSession() {
@@ -1134,6 +1193,103 @@ function appendSourcesToLastAssistant(sources) {
   scrollMessagesToBottom();
 }
 
+async function sendWorkflowReport() {
+  if (state.inFlight) {
+    return;
+  }
+  if (!state.activeId) {
+    showToast("Select or create a chat first");
+    return;
+  }
+
+  const resolved = resolveWorkflowReportMessage();
+  if (!resolved) {
+    showToast("Enter a question or open a chat with a prior user message");
+    return;
+  }
+
+  const { text, fromInput } = resolved;
+  setSessionEmptyState(false);
+  const conversationId = state.activeId;
+
+  if (fromInput) {
+    appendUserBubble(text);
+    $("input").value = "";
+    autoResizeInput();
+  }
+
+  state.inFlight = true;
+  state.abortController = new AbortController();
+  setComposerBusy(true);
+  showLoadingBubble(WORKFLOW_LOADING_HINTS);
+
+  try {
+    const accepted = await api("/api/workflows/report", {
+      method: "POST",
+      body: JSON.stringify({ message: text, conversationId }),
+      signal: state.abortController.signal,
+    });
+    removeLoadingBubble();
+
+    let reply = accepted;
+    if (accepted && accepted.runId && accepted.status !== "SUCCEEDED" && accepted.status !== "FAILED") {
+      showLoadingBubble(WORKFLOW_LOADING_HINTS);
+      const terminal = await pollWorkflowRun(accepted.runId, state.abortController.signal);
+      removeLoadingBubble();
+      if (terminal.status !== "SUCCEEDED") {
+        const errMsg = terminal.errorMessage || "Workflow report failed";
+        showToast(errMsg);
+        await selectSession(conversationId);
+        return;
+      }
+      reply = await api(`/api/workflows/${accepted.runId}/report`, {
+        signal: state.abortController.signal,
+      });
+    }
+
+    if (!reply || reply.status !== "SUCCEEDED") {
+      const errMsg = (reply && reply.errorMessage) || "Workflow report failed";
+      showToast(errMsg);
+      await selectSession(conversationId);
+      return;
+    }
+
+    await refreshSessions(conversationId);
+    await selectSession(conversationId);
+    if (reply.sources && reply.sources.length > 0) {
+      appendSourcesToLastAssistant(reply.sources);
+    }
+  } catch (e) {
+    removeLoadingBubble();
+    if (isAbortError(e)) {
+      showToast("Report generation stopped");
+    } else {
+      showToast(String(e && e.message ? e.message : e));
+      await selectSession(conversationId);
+    }
+  } finally {
+    state.inFlight = false;
+    state.abortController = null;
+    setComposerBusy(false);
+    $("input").focus();
+  }
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function pollWorkflowRun(runId, signal, intervalMs = 1500, maxAttempts = 120) {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const run = await api(`/api/workflows/${runId}`, { signal });
+    if (run && (run.status === "SUCCEEDED" || run.status === "FAILED")) {
+      return run;
+    }
+    await delay(intervalMs);
+  }
+  throw new Error("Workflow report timed out");
+}
+
 async function sendMessage() {
   if (state.inFlight) {
     return;
@@ -1283,6 +1439,7 @@ function wire() {
   });
 
   $("send").addEventListener("click", sendMessage);
+  $("workflowReportBtn")?.addEventListener("click", sendWorkflowReport);
   $("stop").addEventListener("click", stopMessage);
   $("compactReviewBtn")?.addEventListener("click", () => runCompaction("review"));
   $("compactExecuteBtn")?.addEventListener("click", () => runCompaction("execute"));

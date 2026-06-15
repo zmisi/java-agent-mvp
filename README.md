@@ -220,6 +220,116 @@ AGENT_UI_DB_USER=agent AGENT_UI_DB_PASSWORD=agent \
 
 Web UI 支持：左侧会话 `…` 菜单（重命名 / 删除）、左下角**设置**（深色 / 浅色 / 跟随系统、字体大小，保存在浏览器 `localStorage`）、输入框左侧 **Context** 圆环（最后一次发送后估计的输入上下文占用与分类分解）。
 
+## Workflow API（admission-workflow）
+
+显式 Workflow Runtime，执行「志愿分析报告」链路，每步写入 DB checkpoint（`agent_ui.workflow_run` / `workflow_checkpoint`）。开关：`app.admission-workflow.enabled=true`。
+
+**Week 2 异步（默认）：** `POST /api/workflows/report` 立即返回 `202 Accepted` + `{ runId, status: "PENDING" }`，同 JVM Worker 从 Redis 队列消费并执行；客户端轮询 `GET /api/workflows/{runId}`，完成后 `GET /api/workflows/{runId}/report` 取完整报告。调试或单测可用 `?sync=true` 或请求头 `X-Workflow-Sync: true` 走同步 `200` 路径（与 Week 1 行为一致）。
+
+架构：`API → Redis List (LPUSH/BRPOP) → WorkflowJobConsumer → WorkflowEngine → Postgres checkpoints`
+
+配置（`application.yml` / `application-docker.yml`）：
+
+```yaml
+app.admission-workflow.async:
+  enabled: false          # 本地/CI 无 Redis 时 false；docker profile 为 true
+  queue-key: admission-workflow:jobs
+  consumer-enabled: true
+  brpop-timeout-seconds: 5
+```
+
+`docker compose up` 会启动 `redis:7`；app 依赖 Redis healthcheck。
+
+节点链：`intent_classify → score_tool → filter_score_majors → policy_rag → verify_answer → format_response → synthesize_report`
+
+`score_tool` 与 Chat MCP 一致：用 **用户分 + 15** 调用 `getMajorByScore`（MCP 返回 `min_score <= 查询分`），再在 `filter_score_majors` 按用户真实分划分冲（+15 内）/ 稳（至用户分）/ 保（-15 及以下）。
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/workflows/report` | 默认异步：`202` + `{ runId, status: "PENDING" }`；`?sync=true` 同步返回完整 `WorkflowReportResponse` |
+| GET | `/api/workflows/{runId}` | 查询 run 状态、checkpoint 摘要、`progress: { completedNodes, totalNodes }` |
+| GET | `/api/workflows/{runId}/report` | 终态（`SUCCEEDED`/`FAILED`）时返回完整 report DTO；`RUNNING`/`PENDING` → `409` |
+| GET | `/api/workflows/{runId}/checkpoints` | 查询全部 checkpoint（含 input/output JSON，用于演示 resume） |
+
+异步轮询示例：
+
+```bash
+# 1. 入队
+curl -i -X POST http://localhost:8080/api/workflows/report \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"message":"安徽物理类620分，合工大计算机和软件工程政策"}'
+# HTTP/1.1 202  {"runId":"...","status":"PENDING"}
+
+# 2. 轮询状态
+curl http://localhost:8080/api/workflows/<runId> -H "Authorization: Bearer <token>"
+
+# 3. 完成后取报告
+curl http://localhost:8080/api/workflows/<runId>/report -H "Authorization: Bearer <token>"
+```
+
+同步调试：
+
+```bash
+curl -X POST 'http://localhost:8080/api/workflows/report?sync=true' \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"message":"安徽物理类620分"}'
+```
+
+微信小程序用户（guest/member）可访问 `/api/workflows/*`；需 JWT 鉴权。
+
+Web UI 与微信小程序 Composer 均提供 **「志愿报告」** 按钮：默认异步入队并轮询，完成后展示结构化报告（表格 + 政策来源 + LLM 叙述）；普通发送仍走 `/api/conversations/{id}/chat`。
+
+## Observability（Week 4）
+
+Micrometer + OpenTelemetry trace + Prometheus metrics。本地可选启用 Jaeger / Prometheus：
+
+```bash
+# 启动应用 + Redis + Postgres + Jaeger + Prometheus
+docker compose --profile observability up --build
+
+# Podman：勿用裸命令 podman compose（会走 Docker Desktop 的 compose 插件）
+./scripts/podman-compose.sh --profile observability up --build
+
+# 或本机开发（online profile 已包含 observability）
+SPRING_PROFILES_ACTIVE=online mvn spring-boot:run
+
+# 本机 mvn + 容器化 Jaeger/Prometheus（勿与 docker app 同时占 8080）
+./scripts/podman-compose.sh --profile observability up jaeger prometheus -d
+```
+
+| 组件 | URL |
+|------|-----|
+| Jaeger UI | http://localhost:16686 |
+| Prometheus | http://localhost:9090 |
+| App metrics | http://localhost:8080/actuator/prometheus |
+
+一次 workflow 请求在 Jaeger 中可看到：`agent.workflow.run` → `agent.workflow.node.*` → `agent.rag.retrieve` / `agent.tool.getMajorByScore` / `agent.llm.synthesize`。
+
+关键指标（Prometheus）：
+
+- `agent_workflow_run_total{status="SUCCEEDED"}`
+- `agent_workflow_node_seconds_bucket{node="score_tool"}`
+- `agent_rag_retrieve_hits`
+- `agent_tool_call_seconds_count{tool="getMajorByScore"}`
+
+HTTP 响应头含 `X-Trace-Id`（当 tracing 启用时）。日志 pattern 含 `traceId` / `workflowRunId`（`application-observability.yml`）。
+
+## Eval golden set（Week 4）
+
+见 [eval/README.md](eval/README.md)。
+
+```bash
+# CI / 日常：intent + deterministic workflow（mock MCP/RAG）
+mvn test
+
+# 本地全链路（需 Postgres + MCP + 配置）
+EVAL_LIVE=1 mvn test -Peval-live
+```
+
+Live 报告输出：`eval/reports/latest.md`。
+
 ## 故障排查
 
 - **MyBatis 启动失败、指向已删除的 `*Mapper.xml`**：源码已删但 `target/classes/mapper/` 仍有旧文件。执行 `mvn clean spring-boot:run`（或 `mvn clean package` 后再启动）。

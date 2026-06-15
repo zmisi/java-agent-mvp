@@ -1,17 +1,17 @@
 package com.example.javaagentmvp.rag;
 
-import com.example.javaagentmvp.chat.UserMessageTextCleaner;
+import com.example.javaagentmvp.admissionworkflow.intent.ConversationTurnResolver;
+import com.example.javaagentmvp.admissionworkflow.intent.ResolvedTurn;
+import com.example.javaagentmvp.admissionworkflow.intent.ResolvedTurnContext;
+import com.example.javaagentmvp.chat.UserTurnContextExtractor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClientRequest;
 import org.springframework.ai.chat.client.ChatClientResponse;
 import org.springframework.ai.chat.client.advisor.api.CallAdvisor;
 import org.springframework.ai.chat.client.advisor.api.CallAdvisorChain;
-import org.springframework.ai.chat.messages.Message;
-import org.springframework.ai.chat.messages.MessageType;
 import org.springframework.ai.document.Document;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -26,15 +26,25 @@ public class RagFlowStartAdvisor implements CallAdvisor {
 
     private final RagQueryRouter ragQueryRouter;
 
+    private final ConversationTurnResolver turnResolver;
+
     private final int order;
 
-    public RagFlowStartAdvisor(RagRetrievalService ragRetrievalService, RagQueryRouter ragQueryRouter) {
-        this(ragRetrievalService, ragQueryRouter, RagAdvisorOrder.FLOW_START);
+    public RagFlowStartAdvisor(
+            RagRetrievalService ragRetrievalService,
+            RagQueryRouter ragQueryRouter,
+            ConversationTurnResolver turnResolver) {
+        this(ragRetrievalService, ragQueryRouter, turnResolver, RagAdvisorOrder.FLOW_START);
     }
 
-    public RagFlowStartAdvisor(RagRetrievalService ragRetrievalService, RagQueryRouter ragQueryRouter, int order) {
+    public RagFlowStartAdvisor(
+            RagRetrievalService ragRetrievalService,
+            RagQueryRouter ragQueryRouter,
+            ConversationTurnResolver turnResolver,
+            int order) {
         this.ragRetrievalService = ragRetrievalService;
         this.ragQueryRouter = ragQueryRouter;
+        this.turnResolver = turnResolver;
         this.order = order;
     }
 
@@ -42,13 +52,16 @@ public class RagFlowStartAdvisor implements CallAdvisor {
     public ChatClientResponse adviseCall(ChatClientRequest request, CallAdvisorChain chain) {
         RagFlowContext.start();
         String flowId = RagFlowContext.flowId();
-        UserTurnContext userTurnContext = extractUserTurnContext(request);
+        UserTurnContextExtractor.UserTurnContext userTurnContext = UserTurnContextExtractor.extract(request);
         String userMessage = userTurnContext.currentUserMessage();
 
-        RagQueryRouter.Decision preliminary = ragQueryRouter.decide(
-                userMessage,
-                userTurnContext.priorUserMessages(),
-                userTurnContext.priorContextHints());
+        ResolvedTurn resolved = ResolvedTurnContext.current()
+                .orElseGet(() -> turnResolver.resolve(
+                        userMessage,
+                        userTurnContext.priorUserMessages(),
+                        userTurnContext.priorContextHints()));
+
+        RagQueryRouter.Decision preliminary = ragQueryRouter.decide(resolved, userMessage);
         if (!preliminary.useRag() && !preliminary.shouldRetrieve()) {
             RagFlowContext.skip(preliminary.reason());
             log.info("========== RAG skipped [{}] — {} ==========", flowId, preliminary.reason());
@@ -97,49 +110,4 @@ public class RagFlowStartAdvisor implements CallAdvisor {
         return order;
     }
 
-    private static UserTurnContext extractUserTurnContext(ChatClientRequest request) {
-        List<Message> messages = request.prompt().getInstructions();
-        List<String> userMessages = new ArrayList<>();
-        List<String> assistantHints = new ArrayList<>();
-        for (int i = messages.size() - 1; i >= 0; i--) {
-            Message message = messages.get(i);
-            if (message.getMessageType() == MessageType.USER) {
-                String cleaned = UserMessageTextCleaner.clean(message.getText());
-                if (cleaned != null && !cleaned.isBlank()) {
-                    userMessages.add(cleaned.strip());
-                }
-            }
-            else if (message.getMessageType() == MessageType.ASSISTANT) {
-                String hint = compactHint(message.getText());
-                if (!hint.isBlank()) {
-                    assistantHints.add(hint);
-                }
-            }
-        }
-        if (userMessages.isEmpty()) {
-            return new UserTurnContext("", List.of(), List.copyOf(assistantHints));
-        }
-        String current = userMessages.get(0);
-        List<String> prior = userMessages.size() == 1 ? List.of() : userMessages.subList(1, userMessages.size());
-        List<String> hints = new ArrayList<>(prior);
-        hints.addAll(assistantHints);
-        return new UserTurnContext(current, List.copyOf(prior), List.copyOf(hints));
-    }
-
-    private static String compactHint(String text) {
-        if (text == null || text.isBlank()) {
-            return "";
-        }
-        String normalized = text.replaceAll("\\s+", " ").strip();
-        if (normalized.length() <= 160) {
-            return normalized;
-        }
-        return normalized.substring(0, 160);
-    }
-
-    private record UserTurnContext(
-            String currentUserMessage,
-            List<String> priorUserMessages,
-            List<String> priorContextHints) {
-    }
 }

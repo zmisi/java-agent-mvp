@@ -34,3 +34,4 @@ build/
 .vscode/
 *.DS_Store
 compaction-architecture-analysis.html
+eval/reports/

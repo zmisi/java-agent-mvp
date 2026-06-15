@@ -28,6 +28,9 @@ app:
     prompt:
       # System prompt file (Markdown/plain text). Edit without recompiling Java.
       location: classpath:prompts/db-agent-system.md
+      score-major-prompt-location: classpath:prompts/admission-score-major-synthesis.md
+      rank-query-prompt-location: classpath:prompts/admission-rank-query.md
+      policy-query-prompt-location: classpath:prompts/admission-policy-query.md
       # Replaces {schema} placeholders in the prompt file
       schema: emp
   chat:
@@ -62,8 +65,9 @@ app:
       用高考分数查询可报专业/院校：必须调用 MCP 工具 getMajorByScore（必填 score、province；
       可选 year、subject_group、campus、admission_type），不要根据知识库片段编造专业列表。
       只需用用户实际分数调用一次，禁止自行多次调用不同分数；系统按各专业最低分与用户分数比较自动分冲（需+15才够）/稳（分数正好够）/保（-15仍够）三档，客户端固定展示三段表格。
+      查询分数对应的排名或位次：必须调用 MCP 工具 getRankByScore（必填 score；可选 province、year、subject_group），不要根据知识库片段编造位次。返回的位次均来自已导入的省级一分一段表（含 source_url），禁止自行标注「预估」或「建模生成」。
     routing:
-      # 命中任一条即跳过 RAG，走 MCP（SQL 或 getMajorByScore）。优先于 rag-patterns。Java 正则，不区分大小写。
+      # 命中任一条即跳过 RAG，走 MCP（SQL、getMajorByScore 或 getRankByScore）。优先于 rag-patterns。Java 正则，不区分大小写。
       database-patterns:
         - '\b(list|show|describe|desc)\b[\s\S]{0,40}\btables?\b|\btables?\b[\s\S]{0,20}\b(list|show|all)\b'
         - '\b(information_schema|table_schema|table_name|column_name)\b'
@@ -77,6 +81,9 @@ app:
         - '(专业|报考|报志愿|志愿|可报|能上|录取|什么专业|哪些专业|什么学校)[\s\S]{0,80}(?<!\d)\d{3,4}(?!\d)'
         - '(专业|报考|报志愿|志愿|可报|能上|录取)[\s\S]{0,60}\d{3,4}\s*分'
         - '(多少|几分|考了|高考)\s*\d{3,4}\s*分[\s\S]{0,40}(专业|学校|院校|报|志愿)'
+        - '\d{3,4}\s*分[\s\S]{0,40}(排名|位次|名次|排多少|多少位|多少名|排第几)'
+        - '(排名|位次|名次|排多少|多少位|多少名|排第几)[\s\S]{0,40}\d{3,4}\s*分'
+        - '(?<!\d)\d{3,4}(?!\d)[\s\S]{0,40}(排名|位次|名次|排多少|多少位|多少名|排第几)'
       # 命中任一条即走 RAG 知识库（招生简章、政策、章程等）。Java 正则，不区分大小写。
       rag-patterns:
         - '\brag\b'
@@ -131,6 +138,21 @@ app:
       # auto | pgroonga | postgres-fts
       lexical-engine: auto
       fts-dictionary: simple
+  admission-workflow:
+    enabled: true
+    default-workflow-type: admission_report
+    log-checkpoints: true
+    synthesis:
+      enabled: true
+      prompt-location: classpath:prompts/admission-report-synthesis.md
+      rank-prompt-location: classpath:prompts/admission-rank-synthesis.md
+      temperature: 0.3
+      fallback-to-summary-on-failure: true
+    async:
+      enabled: false
+      queue-key: admission-workflow:jobs
+      consumer-enabled: true
+      brpop-timeout-seconds: 5
 
 logging:
   level:
@@ -141,6 +163,8 @@ logging:
     com.example.javaagentmvp.rag.RagFlowLoggingAdvisor: INFO
     com.example.javaagentmvp.rag.RagFlowStartAdvisor: INFO
     com.example.javaagentmvp.rag.RagRetrievalService: INFO
+    com.example.javaagentmvp.admissionworkflow.tool.AdmissionScoreToolClient: INFO
+    com.example.javaagentmvp.admissionworkflow.engine.WorkflowEngine: INFO
     com.example.javaagentmvp.QwenApiLoggingAdvisor: INFO
     com.alibaba.cloud.ai.dashscope: DEBUG
     com.alibaba.cloud.ai.dashscope.api: DEBUG
@@ -153,13 +177,34 @@ logging:
 
 mybatis:
   mapper-locations: classpath:mapper/**/*.xml
-  type-aliases-package: com.example.javaagentmvp.chat.persistence.model
+  type-aliases-package: com.example.javaagentmvp.chat.persistence.model,com.example.javaagentmvp.admissionworkflow.persistence.model
   configuration:
     map-underscore-to-camel-case: true
 
 spring:
   profiles:
-    default: local
+    default: online
+    group:
+      # DashScope (online) + Redis async — one profile name for local Week 2 testing:
+      #   docker compose up redis -d
+      #   SPRING_PROFILES_ACTIVE=async-local mvn spring-boot:run
+      async-local:
+        - online
+        - async-redis
+      # Local DashScope + observability (Jaeger on localhost:4318):
+      #   SPRING_PROFILES_ACTIVE=online mvn spring-boot:run
+      online:
+        - online
+        - observability
+      observability-docker:
+        - docker
+        - observability
+        - docker-observability
+
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
 
   servlet:
     multipart:

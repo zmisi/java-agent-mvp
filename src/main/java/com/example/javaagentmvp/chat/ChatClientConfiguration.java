@@ -8,6 +8,7 @@ import com.example.javaagentmvp.dbagent.DbAgentTargetRegistry;
 import com.example.javaagentmvp.chat.ui.McpTableExtractor;
 import com.example.javaagentmvp.rag.AdmissionsAnswerFormatAdvisor;
 import com.example.javaagentmvp.rag.ConditionalQuestionAnswerAdvisor;
+import com.example.javaagentmvp.admissionworkflow.intent.ConversationTurnResolver;
 import com.example.javaagentmvp.rag.RagFlowLoggingAdvisor;
 import com.example.javaagentmvp.rag.RagFlowStartAdvisor;
 import com.example.javaagentmvp.rag.RagProperties;
@@ -63,6 +64,11 @@ public class ChatClientConfiguration {
     }
 
     @Bean
+    ResolvedTurnAdvisor resolvedTurnAdvisor(ConversationTurnResolver conversationTurnResolver) {
+        return new ResolvedTurnAdvisor(conversationTurnResolver);
+    }
+
+    @Bean
     ChatClient chatClient(
             ChatClient.Builder chatClientBuilder,
             DbAgentTargetRegistry dbAgentTargetRegistry,
@@ -70,6 +76,7 @@ public class ChatClientConfiguration {
             QwenApiLoggingAdvisor qwenApiLoggingAdvisor,
             AgentSystemPrompt agentSystemPrompt,
             RagProperties ragProperties,
+            ResolvedTurnAdvisor resolvedTurnAdvisor,
             ObjectProvider<RagFlowStartAdvisor> ragFlowStartAdvisor,
             ObjectProvider<AdmissionsAnswerFormatAdvisor> admissionsAnswerFormatAdvisor,
             ObjectProvider<ConditionalQuestionAnswerAdvisor> conditionalQuestionAnswerAdvisor,
@@ -89,7 +96,8 @@ public class ChatClientConfiguration {
                 .defaultAdvisors(
                         MessageChatMemoryAdvisor.builder(chatMemory).build(),
                         qwenApiLoggingAdvisor,
-                        chatContextUsageAdvisor);
+                        chatContextUsageAdvisor,
+                        resolvedTurnAdvisor);
 
         ragFlowStartAdvisor.ifAvailable(builder::defaultAdvisors);
         admissionsAnswerFormatAdvisor.ifAvailable(builder::defaultAdvisors);
