@@ -33,6 +33,7 @@ public class FormatResponseNode implements WorkflowNode {
         if (scoreResult == null) {
             scoreResult = rawScoreResult;
         }
+        JsonNode rankResult = context.get(ScoreToolNode.KEY_RANK_RESULT, JsonNode.class);
         AdmissionQueryHints.Hints hints =
                 context.get(FilterScoreMajorsNode.KEY_QUERY_HINTS, AdmissionQueryHints.Hints.class);
         @SuppressWarnings("unchecked")
@@ -43,9 +44,12 @@ public class FormatResponseNode implements WorkflowNode {
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("intent", intent == null ? AdmissionIntent.UNKNOWN.name() : intent.name());
-        result.put("summary", buildSummary(intent, scoreResult, rawScoreResult, policySources, hints));
+        result.put("summary", buildSummary(intent, scoreResult, rawScoreResult, rankResult, policySources, hints));
         if (scoreResult != null) {
             result.put("scoreResult", scoreResult);
+        }
+        if (rankResult != null) {
+            result.put("rankResult", rankResult);
         }
         if (rawScoreResult != null && rawScoreResult != scoreResult) {
             result.put("totalMatchedBeforeFilter", rawScoreResult.path("count").asInt());
@@ -68,6 +72,7 @@ public class FormatResponseNode implements WorkflowNode {
             AdmissionIntent intent,
             JsonNode scoreResult,
             JsonNode rawScoreResult,
+            JsonNode rankResult,
             List<RagSource> policySources,
             AdmissionQueryHints.Hints hints) {
         if (intent == null) {
@@ -75,12 +80,28 @@ public class FormatResponseNode implements WorkflowNode {
         }
         return switch (intent) {
             case SCORE -> buildScoreSummary(scoreResult, hints);
+            case RANK -> buildRankSummary(rankResult);
             case POLICY -> policySources.isEmpty()
                     ? "未检索到相关招生政策文档。"
                     : "已检索到 " + policySources.size() + " 条政策/章程片段，详见 policySources。";
             case REPORT -> buildReportSummary(scoreResult, rawScoreResult, policySources, hints);
             case UNKNOWN -> "请补充高考分数、省份或想了解的招生政策关键词。";
         };
+    }
+
+    private static String buildRankSummary(JsonNode rankResult) {
+        int count = rankCount(rankResult);
+        if (count <= 0) {
+            return "未能查询到该分数对应的位次，请补充省份、科类或年份。";
+        }
+        return "已查询到 " + count + " 条位次记录，详见 rankResult。";
+    }
+
+    private static int rankCount(JsonNode rankResult) {
+        if (rankResult == null) {
+            return 0;
+        }
+        return rankResult.path("count").asInt(rankResult.path("ranks").size());
     }
 
     private static String buildScoreSummary(JsonNode scoreResult, AdmissionQueryHints.Hints hints) {

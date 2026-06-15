@@ -1,0 +1,8 @@
+{"id":"live-report-hfut","input":"安徽物理类620分，合工大计算机和软件工程政策","expectIntent":"REPORT","expectStatus":"SUCCEEDED","requireScoreResult":true,"requirePolicySources":true,"maxLatencyMs":120000}
+{"id":"live-score-630","input":"安徽物理类630分能上合工大什么专业","expectIntent":"SCORE","expectStatus":"SUCCEEDED","requireScoreResult":true,"requirePolicySources":false,"maxLatencyMs":90000}
+{"id":"live-policy-charter","input":"合肥工业大学2025年招生章程录取规则","expectIntent":"POLICY","expectStatus":"SUCCEEDED","requireScoreResult":false,"requirePolicySources":true,"maxLatencyMs":90000}
+{"id":"live-report-ahu","input":"历史类600分安徽，安徽大学法学政策和可报专业","expectIntent":"REPORT","expectStatus":"SUCCEEDED","requireScoreResult":true,"requirePolicySources":true,"maxLatencyMs":120000}
+{"id":"live-score-hfuu","input":"安徽物理类580分合肥大学软件工程","expectIntent":"SCORE","expectStatus":"SUCCEEDED","requireScoreResult":true,"requirePolicySources":false,"maxLatencyMs":90000}
+{"id":"live-policy-plan","input":"合工大2025年安徽招生计划软件工程招多少人","expectIntent":"POLICY","expectStatus":"SUCCEEDED","requireScoreResult":false,"requirePolicySources":true,"maxLatencyMs":90000}
+{"id":"live-missing-province","input":"620分物理类能上什么","expectIntent":"SCORE","expectStatus":"SUCCEEDED","requireScoreResult":false,"requirePolicySources":false,"maxLatencyMs":60000}
+{"id":"live-report-multi-school","input":"物理类615分安徽，对比合工大和安大计算机政策","expectIntent":"REPORT","expectStatus":"SUCCEEDED","requireScoreResult":true,"requirePolicySources":true,"maxLatencyMs":120000}

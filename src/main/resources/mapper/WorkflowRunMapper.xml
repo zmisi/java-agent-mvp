@@ -32,6 +32,14 @@
         WHERE id = #{id}::uuid
     </update>
 
+    <update id="markRunningIfPending">
+        UPDATE agent_ui.workflow_run
+        SET status = 'RUNNING',
+            updated_at = #{updatedAt}
+        WHERE id = #{id}::uuid
+          AND status = 'PENDING'
+    </update>
+
     <update id="updateResult">
         UPDATE agent_ui.workflow_run
         SET status = #{status},

@@ -1,0 +1,12 @@
+# Redis + async workflow (combine with `online` via profile group `async-local`).
+app:
+  admission-workflow:
+    async:
+      enabled: true
+      consumer-enabled: true
+
+spring:
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379

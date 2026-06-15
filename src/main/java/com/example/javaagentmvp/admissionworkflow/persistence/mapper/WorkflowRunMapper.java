@@ -21,6 +21,10 @@ public interface WorkflowRunMapper {
             @Param("finishedAt") Instant finishedAt,
             @Param("errorMessage") String errorMessage);
 
+    int markRunningIfPending(
+            @Param("id") String id,
+            @Param("updatedAt") Instant updatedAt);
+
     int updateResult(
             @Param("id") String id,
             @Param("status") String status,

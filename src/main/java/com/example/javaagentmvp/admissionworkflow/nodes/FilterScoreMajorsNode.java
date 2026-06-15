@@ -5,6 +5,7 @@ import com.example.javaagentmvp.admissionworkflow.engine.WorkflowNode;
 import com.example.javaagentmvp.admissionworkflow.engine.WorkflowNodeResult;
 import com.example.javaagentmvp.admissionworkflow.filter.MajorScoreFilter;
 import com.example.javaagentmvp.admissionworkflow.intent.AdmissionInputParser;
+import com.example.javaagentmvp.admissionworkflow.intent.AdmissionIntent;
 import com.example.javaagentmvp.admissionworkflow.intent.AdmissionQueryHints;
 import com.example.javaagentmvp.rag.RagProperties;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -35,6 +36,11 @@ public class FilterScoreMajorsNode implements WorkflowNode {
 
     @Override
     public WorkflowNodeResult execute(WorkflowContext context) {
+        AdmissionIntent intent = context.get(IntentClassifyNode.KEY_INTENT, AdmissionIntent.class);
+        if (intent == AdmissionIntent.RANK) {
+            return WorkflowNodeResult.skipped("rank query — no major filtering");
+        }
+
         AdmissionQueryHints.Hints hints = AdmissionQueryHints.parse(context.inputMessage(), ragProperties);
         context.put(KEY_QUERY_HINTS, hints);
 

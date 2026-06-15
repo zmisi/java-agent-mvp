@@ -872,7 +872,7 @@ async function selectSession(id) {
     setSessionEmptyState(true);
     const empty = document.createElement("div");
     empty.className = "messages-empty";
-    empty.textContent = "Ask about the database or docs, e.g. RAG 和微调有什么区别？";
+    empty.textContent = "输入问题开始对话，或在下方点击「志愿报告」生成分析报告，例如：安徽物理类620分合工大计算机和软件工程政策";
     box.appendChild(empty);
     refreshWorkflowReportButtonState(state.inFlight);
     return;
@@ -1224,12 +1224,28 @@ async function sendWorkflowReport() {
   showLoadingBubble(WORKFLOW_LOADING_HINTS);
 
   try {
-    const reply = await api("/api/workflows/report", {
+    const accepted = await api("/api/workflows/report", {
       method: "POST",
       body: JSON.stringify({ message: text, conversationId }),
       signal: state.abortController.signal,
     });
     removeLoadingBubble();
+
+    let reply = accepted;
+    if (accepted && accepted.runId && accepted.status !== "SUCCEEDED" && accepted.status !== "FAILED") {
+      showLoadingBubble(WORKFLOW_LOADING_HINTS);
+      const terminal = await pollWorkflowRun(accepted.runId, state.abortController.signal);
+      removeLoadingBubble();
+      if (terminal.status !== "SUCCEEDED") {
+        const errMsg = terminal.errorMessage || "Workflow report failed";
+        showToast(errMsg);
+        await selectSession(conversationId);
+        return;
+      }
+      reply = await api(`/api/workflows/${accepted.runId}/report`, {
+        signal: state.abortController.signal,
+      });
+    }
 
     if (!reply || reply.status !== "SUCCEEDED") {
       const errMsg = (reply && reply.errorMessage) || "Workflow report failed";
@@ -1257,6 +1273,21 @@ async function sendWorkflowReport() {
     setComposerBusy(false);
     $("input").focus();
   }
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function pollWorkflowRun(runId, signal, intervalMs = 1500, maxAttempts = 120) {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const run = await api(`/api/workflows/${runId}`, { signal });
+    if (run && (run.status === "SUCCEEDED" || run.status === "FAILED")) {
+      return run;
+    }
+    await delay(intervalMs);
+  }
+  throw new Error("Workflow report timed out");
 }
 
 async function sendMessage() {

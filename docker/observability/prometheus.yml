@@ -1,0 +1,15 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: java-agent-mvp
+    metrics_path: /actuator/prometheus
+    static_configs:
+      # Full docker-compose stack (app service)
+      - targets: ['app:8080']
+        labels:
+          runtime: docker
+      # Local mvn spring-boot:run on host (Mac Podman/Docker)
+      - targets: ['host.docker.internal:8080']
+        labels:
+          runtime: local

@@ -39,6 +39,25 @@ public class VerifyAnswerNode implements WorkflowNode {
         List<String> issues = new ArrayList<>();
         List<String> followUpFields = new ArrayList<>();
 
+        if (intent == AdmissionIntent.RANK) {
+            JsonNode rankResult = context.get(ScoreToolNode.KEY_RANK_RESULT, JsonNode.class);
+            if (rankResult == null) {
+                Object missing = context.get("missingFields");
+                if (missing != null) {
+                    followUpFields.add(String.valueOf(missing));
+                }
+                else {
+                    issues.add("rank tool returned no data");
+                }
+            }
+            else {
+                int count = rankResult.path("count").asInt(rankResult.path("ranks").size());
+                if (count <= 0) {
+                    issues.add("no rank matched the given score");
+                }
+            }
+        }
+
         if (intent == AdmissionIntent.SCORE || intent == AdmissionIntent.REPORT) {
             if (scoreResult == null) {
                 Object missing = context.get("missingFields");

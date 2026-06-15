@@ -47,6 +47,9 @@ public class PolicyRagNode implements WorkflowNode {
         if (intent == AdmissionIntent.SCORE && !intentClassifier.hasPolicyKeywords(context.inputMessage())) {
             return WorkflowNodeResult.skipped("score-only intent");
         }
+        if (intent == AdmissionIntent.RANK) {
+            return WorkflowNodeResult.skipped("rank-only intent");
+        }
 
         RagRetrievalService retrievalService = ragRetrievalService.getIfAvailable();
         if (retrievalService == null) {

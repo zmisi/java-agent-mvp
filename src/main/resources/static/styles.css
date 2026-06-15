@@ -702,9 +702,20 @@ body {
   justify-content: center;
 }
 
-.workspace-chat.composer-centered .composer-meta,
 .workspace-chat.composer-centered .compaction-result-panel {
   display: none;
+}
+
+.workspace-chat.composer-centered #compactReviewBtn,
+.workspace-chat.composer-centered #compactExecuteBtn,
+.workspace-chat.composer-centered #contextUsageBtn {
+  display: none;
+}
+
+.workspace-chat.composer-centered .composer-meta {
+  display: flex;
+  justify-content: center;
+  padding-top: 10px;
 }
 
 .workspace-chat.composer-centered .messages-empty {
@@ -838,6 +849,77 @@ body {
 
 .msg.assistant .body :last-child {
   margin-bottom: 0;
+}
+
+/* Score-to-rank result table (位次查询) */
+.rank-result-wrap {
+  margin: 0.75em 0 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.rank-result-table {
+  width: 100%;
+  min-width: 36rem;
+  border-collapse: collapse;
+  border-spacing: 0;
+  font-size: var(--font-size-base);
+  line-height: 1.5;
+}
+
+.rank-result-table thead th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--text-muted);
+  padding: 0.5rem 1.25rem 0.625rem 0;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.rank-result-table thead th:last-child {
+  padding-right: 0;
+}
+
+.rank-result-table tbody td {
+  padding: 0.75rem 1.25rem 0.75rem 0;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text);
+}
+
+.rank-result-table tbody td:last-child {
+  padding-right: 0;
+}
+
+.rank-result-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.rank-result-table .rank-cell-strong {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.rank-result-table .rank-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.rank-result-table .rank-source-icon {
+  flex-shrink: 0;
+}
+
+.rank-result-table .rank-source-link {
+  color: var(--accent, #2563eb);
+  text-decoration: none;
+}
+
+.rank-result-table .rank-source-link:hover {
+  text-decoration: underline;
 }
 
 .msg.assistant .body pre {

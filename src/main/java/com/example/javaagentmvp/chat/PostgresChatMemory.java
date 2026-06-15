@@ -15,6 +15,7 @@ import org.springframework.ai.chat.messages.Message;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Function;
 
 /**
  * {@link ChatMemory} backed by PostgreSQL ({@code agent_ui.chat_memory_message}).
@@ -82,6 +83,30 @@ public final class PostgresChatMemory implements ChatMemory {
         if (tables == null || tables.isEmpty()) {
             return;
         }
+        updateLatestAssistantPayload(conversationId, node -> {
+            node.set("uiTables", objectMapper.valueToTree(tables));
+            return true;
+        });
+    }
+
+    public void replaceLatestAssistantText(String conversationId, String text) {
+        if (text == null || text.isBlank()) {
+            return;
+        }
+        updateLatestAssistantPayload(conversationId, node -> {
+            node.put("text", text);
+            return true;
+        }, false);
+    }
+
+    private void updateLatestAssistantPayload(String conversationId, Function<ObjectNode, Boolean> mutator) {
+        updateLatestAssistantPayload(conversationId, mutator, true);
+    }
+
+    private void updateLatestAssistantPayload(
+            String conversationId,
+            Function<ObjectNode, Boolean> mutator,
+            boolean skipToolCallMessages) {
         List<ChatMemoryMessageRow> rows = chatMemoryMessageMapper.selectTranscriptByConversationId(conversationId);
         for (int i = rows.size() - 1; i >= 0; i--) {
             ChatMemoryMessageRow row = rows.get(i);
@@ -90,16 +115,18 @@ public final class PostgresChatMemory implements ChatMemory {
                 if (!"assistant".equals(MessagePayloadCodec.displayRole(node))) {
                     continue;
                 }
-                if (TranscriptBuilder.hasToolCalls(node)) {
+                if (skipToolCallMessages && TranscriptBuilder.hasToolCalls(node)) {
                     continue;
                 }
                 ObjectNode updated = ((ObjectNode) node).deepCopy();
-                updated.set("uiTables", objectMapper.valueToTree(tables));
+                if (!Boolean.TRUE.equals(mutator.apply(updated))) {
+                    return;
+                }
                 chatMemoryMessageMapper.updatePayloadById(row.getId(), objectMapper.writeValueAsString(updated));
                 return;
             }
             catch (JsonProcessingException ex) {
-                throw new IllegalStateException("Failed to attach uiTables for conversation " + conversationId, ex);
+                throw new IllegalStateException("Failed to update assistant payload for conversation " + conversationId, ex);
             }
         }
     }

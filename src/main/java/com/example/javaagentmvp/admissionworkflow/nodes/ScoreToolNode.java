@@ -16,6 +16,7 @@ public class ScoreToolNode implements WorkflowNode {
 
     public static final String NAME = "score_tool";
     public static final String KEY_SCORE_RESULT = "scoreResult";
+    public static final String KEY_RANK_RESULT = "rankResult";
 
     private final AdmissionScoreToolClient admissionScoreToolClient;
 
@@ -36,6 +37,10 @@ public class ScoreToolNode implements WorkflowNode {
         }
 
         AdmissionInputParser.ParsedAdmissionInput parsed = AdmissionInputParser.parse(context.inputMessage());
+        if (intent == AdmissionIntent.RANK) {
+            return executeRankQuery(context, parsed);
+        }
+
         String missing = AdmissionInputParser.describeMissingFields(parsed);
         if (missing != null) {
             if (intent == AdmissionIntent.SCORE || intent == AdmissionIntent.REPORT) {
@@ -63,6 +68,33 @@ public class ScoreToolNode implements WorkflowNode {
                     "subjectGroup", parsed.subjectGroup() == null ? "" : parsed.subjectGroup(),
                     "year", parsed.year() == null ? "" : parsed.year(),
                     "admissionType", parsed.admissionType() == null ? "" : parsed.admissionType()));
+        }
+        catch (RuntimeException ex) {
+            return WorkflowNodeResult.failed(ex.getMessage());
+        }
+    }
+
+    private WorkflowNodeResult executeRankQuery(WorkflowContext context, AdmissionInputParser.ParsedAdmissionInput parsed) {
+        if (parsed.score() == null) {
+            context.put("missingFields", "score");
+            return WorkflowNodeResult.skipped("missing required field: score");
+        }
+
+        try {
+            JsonNode result = admissionScoreToolClient.getRankByScore(
+                    context.runId(),
+                    parsed.score(),
+                    parsed.province(),
+                    parsed.subjectGroup(),
+                    parsed.year());
+            context.put(KEY_RANK_RESULT, result);
+            int count = result.path("count").asInt(result.path("ranks").size());
+            return WorkflowNodeResult.succeeded(Map.of(
+                    "count", count,
+                    "score", parsed.score(),
+                    "province", parsed.province() == null ? "" : parsed.province(),
+                    "subjectGroup", parsed.subjectGroup() == null ? "" : parsed.subjectGroup(),
+                    "year", parsed.year() == null ? "" : parsed.year()));
         }
         catch (RuntimeException ex) {
             return WorkflowNodeResult.failed(ex.getMessage());

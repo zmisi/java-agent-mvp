@@ -7,7 +7,6 @@ import com.example.javaagentmvp.auth.UserRole;
 import com.example.javaagentmvp.chat.AgentConversationRepository;
 import com.example.javaagentmvp.chat.ConversationAccessService;
 import com.example.javaagentmvp.chat.PostgresChatMemory;
-import com.example.javaagentmvp.chat.ui.TranscriptBuilder;
 import com.example.javaagentmvp.chat.context.ChatContextUsageRegistry;
 import jakarta.servlet.http.HttpServletRequest;
 import com.example.javaagentmvp.chat.context.ContextUsageResponse;
@@ -15,6 +14,8 @@ import com.example.javaagentmvp.chat.context.ConversationCompactionService;
 import com.example.javaagentmvp.chat.context.ConversationTurnSummaryBuffer;
 import com.example.javaagentmvp.chat.ui.ChatTable;
 import com.example.javaagentmvp.chat.ui.McpTableContext;
+import com.example.javaagentmvp.chat.ui.McpRankContext;
+import com.example.javaagentmvp.admissionworkflow.intent.ResolvedTurnContext;
 import com.example.javaagentmvp.rag.RagFlowContext;
 import com.example.javaagentmvp.rag.RagSource;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -96,6 +97,8 @@ public class ChatController {
                     .call()
                     .content();
 
+            reply = applyDeterministicRankReply(conversationId, reply);
+
             ContextUsageResponse contextUsage = chatContextUsageRegistry.consume();
             turnSummaryBuffer.appendTurn(conversationId, message, reply);
             touchConversation(conversationId, message, user);
@@ -112,7 +115,20 @@ public class ChatController {
         finally {
             RagFlowContext.clear();
             McpTableContext.clear();
+            McpRankContext.clear();
+            ResolvedTurnContext.clear();
         }
+    }
+
+    private String applyDeterministicRankReply(String conversationId, String llmReply) {
+        return McpRankContext.capture()
+                .map(McpRankContext.RankCapture::formatted)
+                .filter(formatted -> formatted != null && !formatted.isBlank())
+                .map(formatted -> {
+                    postgresChatMemory.replaceLatestAssistantText(conversationId, formatted);
+                    return formatted;
+                })
+                .orElse(llmReply);
     }
 
     @PostMapping("/{conversationId}/compact")
@@ -170,18 +186,7 @@ public class ChatController {
     }
 
     private List<ChatTable> resolveReplyTables(String conversationId) {
-        List<ChatTable> tables = McpTableContext.tables();
-        if (!tables.isEmpty()) {
-            return tables;
-        }
-        List<TranscriptBuilder.TranscriptRow> transcript = postgresChatMemory.listTranscript(conversationId);
-        for (int i = transcript.size() - 1; i >= 0; i--) {
-            TranscriptBuilder.TranscriptRow row = transcript.get(i);
-            if ("assistant".equals(row.role()) && row.tables() != null && !row.tables().isEmpty()) {
-                return row.tables();
-            }
-        }
-        return List.of();
+        return McpTableContext.tables();
     }
 
     private void touchConversation(String conversationId, String message, AuthenticatedUser user) {

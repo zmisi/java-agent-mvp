@@ -4,7 +4,7 @@ university_code: HFUU
 doc_type: admission_plans
 year: 2025
 source_url: https://www.hfuu.edu.cn/zs/1e/24/c2999a138788/page.htm
-fetched_at: 2026-05-27T04:32:46+00:00
+fetched_at: 2026-06-03T01:55:38+00:00
 ---
 
 # 合肥大学2025年本科分省分专业计划安排表（不含安徽省计划、中外合作专业计划）

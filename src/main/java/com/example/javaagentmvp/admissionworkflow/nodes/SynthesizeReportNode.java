@@ -4,11 +4,17 @@ import com.example.javaagentmvp.admissionworkflow.AdmissionWorkflowProperties;
 import com.example.javaagentmvp.admissionworkflow.engine.WorkflowContext;
 import com.example.javaagentmvp.admissionworkflow.engine.WorkflowNode;
 import com.example.javaagentmvp.admissionworkflow.engine.WorkflowNodeResult;
+import com.example.javaagentmvp.admissionworkflow.format.RankResponseFormatter;
+import com.example.javaagentmvp.admissionworkflow.intent.AdmissionInputParser;
 import com.example.javaagentmvp.admissionworkflow.intent.AdmissionIntent;
 import com.example.javaagentmvp.rag.RagSource;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.example.javaagentmvp.observability.AgentMetrics;
+import com.example.javaagentmvp.observability.TraceResponseFilter;
+import io.micrometer.observation.ObservationRegistry;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.io.Resource;
@@ -31,15 +37,23 @@ public class SynthesizeReportNode implements WorkflowNode {
 
     private final ChatClient workflowChatClient;
     private final AdmissionWorkflowProperties properties;
-    private final String systemPrompt;
+    private final String reportSystemPrompt;
+    private final String rankSystemPrompt;
+    private final AgentMetrics agentMetrics;
+    private final ObservationRegistry observationRegistry;
 
     public SynthesizeReportNode(
             @Qualifier("workflowChatClient") ChatClient workflowChatClient,
             AdmissionWorkflowProperties properties,
-            ResourceLoader resourceLoader) {
+            ResourceLoader resourceLoader,
+            AgentMetrics agentMetrics,
+            ObservationRegistry observationRegistry) {
         this.workflowChatClient = workflowChatClient;
         this.properties = properties;
-        this.systemPrompt = loadSystemPrompt(properties.synthesis().promptLocation(), resourceLoader);
+        this.reportSystemPrompt = loadSystemPrompt(properties.synthesis().promptLocation(), resourceLoader);
+        this.rankSystemPrompt = loadSystemPrompt(properties.synthesis().rankPromptLocation(), resourceLoader);
+        this.agentMetrics = agentMetrics;
+        this.observationRegistry = observationRegistry;
     }
 
     @Override
@@ -56,10 +70,6 @@ public class SynthesizeReportNode implements WorkflowNode {
         }
 
         String summary = String.valueOf(finalResult.getOrDefault("summary", ""));
-        if (!properties.synthesis().enabled()) {
-            applyReport(finalResult, summary, false);
-            return WorkflowNodeResult.skipped("synthesis disabled");
-        }
 
         AdmissionIntent intent = context.get(IntentClassifyNode.KEY_INTENT, AdmissionIntent.class);
         if (intent == AdmissionIntent.UNKNOWN && !hasUsableData(context, finalResult)) {
@@ -67,16 +77,40 @@ public class SynthesizeReportNode implements WorkflowNode {
             return WorkflowNodeResult.skipped("unknown intent without data");
         }
 
+        if (intent == AdmissionIntent.RANK) {
+            String rankReport = formatRankReport(context, finalResult);
+            if (rankReport != null) {
+                applyReport(finalResult, rankReport, false);
+                context.put(FormatResponseNode.KEY_FINAL_RESULT, finalResult);
+                return WorkflowNodeResult.succeeded(Map.of(
+                        "reportChars", rankReport.length(),
+                        "usedLlm", false,
+                        "deterministicRankFormat", true));
+            }
+        }
+
+        if (!properties.synthesis().enabled()) {
+            applyReport(finalResult, summary, false);
+            return WorkflowNodeResult.skipped("synthesis disabled");
+        }
+
         String userPrompt = buildUserPrompt(context, finalResult);
+        String systemPrompt = resolveSystemPrompt(intent);
         String report;
         try {
-            log.info("[WORKFLOW runId={}] synthesize_report request chars={}",
-                    context.runId(), userPrompt.length());
-            report = workflowChatClient.prompt()
-                    .system(systemPrompt)
-                    .user(userPrompt)
-                    .call()
-                    .content();
+            log.info("[WORKFLOW runId={}] synthesize_report request chars={} intent={}",
+                    context.runId(), userPrompt.length(), intent);
+            long startedAt = System.nanoTime();
+            report = TraceResponseFilter.observe(
+                    observationRegistry,
+                    "agent.llm.synthesize",
+                    "workflow",
+                    () -> workflowChatClient.prompt()
+                            .system(systemPrompt)
+                            .user(userPrompt)
+                            .call()
+                            .content());
+            agentMetrics.recordLlmCall("workflow", (System.nanoTime() - startedAt) / 1_000_000);
             if (report == null || report.isBlank()) {
                 throw new IllegalStateException("empty synthesis response");
             }
@@ -129,6 +163,12 @@ public class SynthesizeReportNode implements WorkflowNode {
             prompt.append(formatScoreSection(scoreResult)).append("\n");
         }
 
+        Object rankResult = finalResult.get("rankResult");
+        if (rankResult != null) {
+            prompt.append("\n--- 分数位次（结构化，均为已导入的官方一分一段表） ---\n");
+            prompt.append(formatRankSection(rankResult)).append("\n");
+        }
+
         Object totalBefore = finalResult.get("totalMatchedBeforeFilter");
         if (totalBefore != null) {
             prompt.append("筛选前全省可报专业总数：").append(totalBefore).append("\n");
@@ -158,8 +198,145 @@ public class SynthesizeReportNode implements WorkflowNode {
                     .append('\n');
         }
 
-        prompt.append("\n请撰写完整的志愿分析报告。");
+        if (AdmissionIntent.RANK.name().equals(intent)) {
+            prompt.append("\n请根据以上位次数据撰写完整回答。");
+        }
+        else {
+            prompt.append("\n请撰写完整的志愿分析报告。");
+        }
         return prompt.toString();
+    }
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
+    private static String formatRankReport(WorkflowContext context, Map<String, Object> finalResult) {
+        Object rankResultObj = finalResult.get("rankResult");
+        if (rankResultObj == null) {
+            return null;
+        }
+        JsonNode rankResult = toJsonNode(rankResultObj);
+        if (rankResult == null) {
+            return null;
+        }
+        int count = rankResult.path("count").asInt(rankResult.path("ranks").size());
+        if (count <= 0) {
+            return null;
+        }
+        AdmissionInputParser.ParsedAdmissionInput parsed = AdmissionInputParser.parse(context.inputMessage());
+        return RankResponseFormatter.format(rankResult, parsed.score(), parsed.province());
+    }
+
+    private static JsonNode toJsonNode(Object value) {
+        if (value instanceof JsonNode node) {
+            return node;
+        }
+        return OBJECT_MAPPER.valueToTree(value);
+    }
+
+    private String resolveSystemPrompt(AdmissionIntent intent) {
+        if (intent == AdmissionIntent.RANK) {
+            return rankSystemPrompt;
+        }
+        return reportSystemPrompt;
+    }
+
+    private static String formatRankSection(Object rankResult) {
+        if (rankResult instanceof JsonNode node) {
+            return formatRankJsonNode(node);
+        }
+        if (rankResult instanceof Map<?, ?> map) {
+            StringBuilder section = new StringBuilder();
+            Object count = map.get("count");
+            if (count != null) {
+                section.append("位次记录数：").append(count).append("\n");
+            }
+            section.append(formatRankSamples(map.get("ranks")));
+            return section.toString();
+        }
+        return String.valueOf(rankResult);
+    }
+
+    private static String formatRankJsonNode(JsonNode rankResult) {
+        StringBuilder section = new StringBuilder();
+        section.append("位次记录数：").append(rankResult.path("count").asInt(0)).append("\n");
+        section.append(formatRankSamples(rankResult.get("ranks")));
+        return section.toString();
+    }
+
+    private static String formatRankSamples(Object ranksObj) {
+        List<String> samples = new ArrayList<>();
+        if (ranksObj instanceof JsonNode ranksNode && ranksNode.isArray()) {
+            for (JsonNode rank : ranksNode) {
+                if (samples.size() >= 8) {
+                    break;
+                }
+                samples.add(formatRankLine(rank));
+            }
+        }
+        else if (ranksObj instanceof List<?> ranks) {
+            for (Object rank : ranks) {
+                if (samples.size() >= 8) {
+                    break;
+                }
+                if (rank instanceof Map<?, ?> rankMap) {
+                    samples.add(formatRankLineMap(rankMap));
+                }
+                else if (rank instanceof JsonNode rankNode) {
+                    samples.add(formatRankLine(rankNode));
+                }
+            }
+        }
+        if (samples.isEmpty()) {
+            return "位次样本：（无）\n";
+        }
+        return "位次样本（最多 8 条）：\n- " + String.join("\n- ", samples) + "\n";
+    }
+
+    private static String formatRankLine(JsonNode rank) {
+        String rankText = text(rank.get("rank"));
+        if (rankText.isBlank()) {
+            rankText = text(rank.get("rank_min")) + "-" + text(rank.get("rank_max"));
+        }
+        StringBuilder line = new StringBuilder(String.format(
+                "%s %s %s · 位次 %s",
+                text(rank.get("year")),
+                text(rank.get("province")),
+                text(rank.get("subject_group")),
+                rankText));
+        String segmentCount = text(rank.get("segment_count"));
+        if (!segmentCount.isBlank()) {
+            line.append(" · 本段 ").append(segmentCount).append(" 人");
+        }
+        appendRankSource(line, text(rank.get("source_url")), text(rank.get("source_provider")));
+        return line.toString();
+    }
+
+    private static String formatRankLineMap(Map<?, ?> rank) {
+        String rankText = mapText(rank, "rank");
+        if (rankText.isBlank()) {
+            rankText = mapText(rank, "rank_min") + "-" + mapText(rank, "rank_max");
+        }
+        StringBuilder line = new StringBuilder(String.format(
+                "%s %s %s · 位次 %s",
+                mapText(rank, "year"),
+                mapText(rank, "province"),
+                mapText(rank, "subject_group"),
+                rankText));
+        String segmentCount = mapText(rank, "segment_count");
+        if (!segmentCount.isBlank()) {
+            line.append(" · 本段 ").append(segmentCount).append(" 人");
+        }
+        appendRankSource(line, mapText(rank, "source_url"), mapText(rank, "source_provider"));
+        return line.toString();
+    }
+
+    private static void appendRankSource(StringBuilder line, String sourceUrl, String sourceProvider) {
+        if (!sourceUrl.isBlank()) {
+            line.append(" · 来源 ").append(sourceUrl);
+        }
+        else if (!sourceProvider.isBlank()) {
+            line.append(" · 来源 ").append(sourceProvider);
+        }
     }
 
     private static String formatScoreSection(Object scoreResult) {
@@ -252,7 +429,7 @@ public class SynthesizeReportNode implements WorkflowNode {
     }
 
     private static boolean hasUsableData(WorkflowContext context, Map<String, Object> finalResult) {
-        if (finalResult.get("scoreResult") != null) {
+        if (finalResult.get("scoreResult") != null || finalResult.get("rankResult") != null) {
             return true;
         }
         Object policySources = finalResult.get("policySources");

@@ -1,0 +1,6 @@
+app:
+  admission-workflow:
+    synthesis:
+      enabled: false
+    async:
+      enabled: false

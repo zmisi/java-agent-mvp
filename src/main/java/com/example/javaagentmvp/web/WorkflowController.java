@@ -2,6 +2,7 @@ package com.example.javaagentmvp.web;
 
 import com.example.javaagentmvp.auth.AuthRequestSupport;
 import com.example.javaagentmvp.auth.AuthenticatedUser;
+import com.example.javaagentmvp.admissionworkflow.AdmissionWorkflowProperties;
 import com.example.javaagentmvp.admissionworkflow.engine.WorkflowCheckpointSummary;
 import com.example.javaagentmvp.admissionworkflow.engine.WorkflowExecutionResult;
 import com.example.javaagentmvp.admissionworkflow.engine.WorkflowRunStatus;
@@ -16,11 +17,13 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -37,22 +40,28 @@ public class WorkflowController {
     private final ConversationAccessService conversationAccessService;
     private final WorkflowReportPresenter workflowReportPresenter;
     private final WorkflowConversationPersistence workflowConversationPersistence;
+    private final AdmissionWorkflowProperties admissionWorkflowProperties;
 
     public WorkflowController(
             AdmissionReportWorkflowService admissionReportWorkflowService,
             WorkflowAccessService workflowAccessService,
             ConversationAccessService conversationAccessService,
             WorkflowReportPresenter workflowReportPresenter,
-            WorkflowConversationPersistence workflowConversationPersistence) {
+            WorkflowConversationPersistence workflowConversationPersistence,
+            AdmissionWorkflowProperties admissionWorkflowProperties) {
         this.admissionReportWorkflowService = admissionReportWorkflowService;
         this.workflowAccessService = workflowAccessService;
         this.conversationAccessService = conversationAccessService;
         this.workflowReportPresenter = workflowReportPresenter;
         this.workflowConversationPersistence = workflowConversationPersistence;
+        this.admissionWorkflowProperties = admissionWorkflowProperties;
     }
 
     @PostMapping("/report")
-    public WorkflowReportResponse runReport(@RequestBody WorkflowReportRequest body, HttpServletRequest request) {
+    public ResponseEntity<?> runReport(
+            @RequestBody WorkflowReportRequest body,
+            @RequestParam(name = "sync", required = false) Boolean sync,
+            HttpServletRequest request) {
         if (body == null || body.message() == null || body.message().isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "message is required");
         }
@@ -64,26 +73,16 @@ public class WorkflowController {
         }
 
         String message = body.message().strip();
-        WorkflowExecutionResult execution = admissionReportWorkflowService.runReport(
-                user.userId(), conversationId, message);
-
-        WorkflowReportPresenter.PresentedWorkflowReport presented =
-                workflowReportPresenter.present(message, execution.result());
-
-        if (conversationId != null
-                && execution.status() == WorkflowRunStatus.SUCCEEDED
-                && presented.assistant() != null
-                && !presented.assistant().isBlank()) {
-            workflowConversationPersistence.persistReport(
-                    conversationId,
-                    user,
-                    message,
-                    presented.assistant(),
-                    presented.tables(),
-                    presented.sources());
+        if (admissionWorkflowProperties.async().enabled() && !isSyncRequested(sync, request)) {
+            String runId = admissionReportWorkflowService.enqueueReport(user.userId(), conversationId, message);
+            return ResponseEntity.accepted()
+                    .body(new WorkflowEnqueueResponse(runId, WorkflowRunStatus.PENDING.name()));
         }
 
-        return toReportResponse(execution, presented);
+        WorkflowExecutionResult execution = admissionReportWorkflowService.runReportSync(
+                user.userId(), conversationId, message);
+        persistConversationIfNeeded(conversationId, user, message, execution);
+        return ResponseEntity.ok(toReportResponse(execution, workflowReportPresenter.present(message, execution.result())));
     }
 
     @GetMapping("/{runId}")
@@ -95,6 +94,7 @@ public class WorkflowController {
         List<WorkflowCheckpointSummaryDto> checkpoints = admissionReportWorkflowService.listCheckpoints(runId).stream()
                 .map(cp -> new WorkflowCheckpointSummaryDto(cp.node(), cp.status(), cp.elapsedMs()))
                 .toList();
+        WorkflowProgress progress = buildProgress(run.status(), run.checkpointCount());
         return new WorkflowRunResponse(
                 run.runId(),
                 run.status(),
@@ -103,7 +103,33 @@ public class WorkflowController {
                 run.inputMessage(),
                 run.result(),
                 run.errorMessage(),
-                checkpoints);
+                checkpoints,
+                progress);
+    }
+
+    @GetMapping("/{runId}/report")
+    public WorkflowReportResponse getReport(@PathVariable String runId, HttpServletRequest request) {
+        AuthenticatedUser user = AuthRequestSupport.requireUser(request);
+        workflowAccessService.requireAccess(runId, user);
+        AdmissionReportWorkflowService.WorkflowRunView run = admissionReportWorkflowService.findRun(runId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "workflow run not found"));
+        if (isInProgress(run.status())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "workflow run is still in progress");
+        }
+        WorkflowReportPresenter.PresentedWorkflowReport presented =
+                workflowReportPresenter.present(run.inputMessage(), run.result());
+        List<WorkflowCheckpointSummaryDto> checkpoints = admissionReportWorkflowService.listCheckpoints(runId).stream()
+                .map(cp -> new WorkflowCheckpointSummaryDto(cp.node(), cp.status(), cp.elapsedMs()))
+                .toList();
+        return new WorkflowReportResponse(
+                run.runId(),
+                run.status(),
+                run.result(),
+                run.errorMessage(),
+                checkpoints,
+                presented.assistant(),
+                presented.tables(),
+                presented.sources());
     }
 
     @GetMapping("/{runId}/checkpoints")
@@ -128,6 +154,48 @@ public class WorkflowController {
                                 cp.startedAt(),
                                 cp.finishedAt()))
                         .toList());
+    }
+
+    private void persistConversationIfNeeded(
+            String conversationId,
+            AuthenticatedUser user,
+            String message,
+            WorkflowExecutionResult execution) {
+        WorkflowReportPresenter.PresentedWorkflowReport presented =
+                workflowReportPresenter.present(message, execution.result());
+        if (conversationId != null
+                && execution.status() == WorkflowRunStatus.SUCCEEDED
+                && presented.assistant() != null
+                && !presented.assistant().isBlank()) {
+            workflowConversationPersistence.persistReport(
+                    conversationId,
+                    user,
+                    message,
+                    presented.assistant(),
+                    presented.tables(),
+                    presented.sources());
+        }
+    }
+
+    private WorkflowProgress buildProgress(String status, int checkpointCount) {
+        int totalNodes = admissionReportWorkflowService.totalNodeCount();
+        if (!isInProgress(status)) {
+            return new WorkflowProgress(checkpointCount, totalNodes);
+        }
+        return new WorkflowProgress(checkpointCount, totalNodes);
+    }
+
+    private static boolean isInProgress(String status) {
+        return WorkflowRunStatus.PENDING.name().equals(status)
+                || WorkflowRunStatus.RUNNING.name().equals(status);
+    }
+
+    private static boolean isSyncRequested(Boolean sync, HttpServletRequest request) {
+        if (Boolean.TRUE.equals(sync)) {
+            return true;
+        }
+        String header = request.getHeader("X-Workflow-Sync");
+        return header != null && header.equalsIgnoreCase("true");
     }
 
     private WorkflowReportResponse toReportResponse(
@@ -158,6 +226,9 @@ public class WorkflowController {
     public record WorkflowReportRequest(String message, String conversationId) {
     }
 
+    public record WorkflowEnqueueResponse(String runId, String status) {
+    }
+
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record WorkflowReportResponse(
             String runId,
@@ -179,7 +250,11 @@ public class WorkflowController {
             String inputMessage,
             Map<String, Object> result,
             String errorMessage,
-            List<WorkflowCheckpointSummaryDto> checkpoints) {
+            List<WorkflowCheckpointSummaryDto> checkpoints,
+            WorkflowProgress progress) {
+    }
+
+    public record WorkflowProgress(int completedNodes, int totalNodes) {
     }
 
     public record WorkflowCheckpointSummaryDto(String node, String status, long elapsedMs) {

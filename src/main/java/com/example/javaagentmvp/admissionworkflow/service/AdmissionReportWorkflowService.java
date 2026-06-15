@@ -1,6 +1,7 @@
 package com.example.javaagentmvp.admissionworkflow.service;
 
 import com.example.javaagentmvp.admissionworkflow.AdmissionWorkflowProperties;
+import com.example.javaagentmvp.admissionworkflow.async.WorkflowJobQueue;
 import com.example.javaagentmvp.admissionworkflow.engine.WorkflowDefinition;
 import com.example.javaagentmvp.admissionworkflow.engine.WorkflowEngine;
 import com.example.javaagentmvp.admissionworkflow.engine.WorkflowExecutionResult;
@@ -33,6 +34,7 @@ public class AdmissionReportWorkflowService {
     private final WorkflowRunRepository workflowRunRepository;
     private final ObjectMapper objectMapper;
     private final WorkflowDefinition admissionReportDefinition;
+    private final WorkflowJobQueue workflowJobQueue;
 
     public AdmissionReportWorkflowService(
             WorkflowEngine workflowEngine,
@@ -45,11 +47,14 @@ public class AdmissionReportWorkflowService {
             PolicyRagNode policyRagNode,
             VerifyAnswerNode verifyAnswerNode,
             FormatResponseNode formatResponseNode,
-            SynthesizeReportNode synthesizeReportNode) {
+            SynthesizeReportNode synthesizeReportNode,
+            @org.springframework.beans.factory.annotation.Autowired(required = false)
+            WorkflowJobQueue workflowJobQueue) {
         this.workflowEngine = workflowEngine;
         this.properties = properties;
         this.workflowRunRepository = workflowRunRepository;
         this.objectMapper = objectMapper;
+        this.workflowJobQueue = workflowJobQueue;
         this.admissionReportDefinition = new WorkflowDefinition(
                 properties.defaultWorkflowType(),
                 List.of(
@@ -63,7 +68,35 @@ public class AdmissionReportWorkflowService {
     }
 
     public WorkflowExecutionResult runReport(Long userId, String conversationId, String message) {
-        return workflowEngine.execute(admissionReportDefinition, userId, conversationId, message);
+        return runReportSync(userId, conversationId, message);
+    }
+
+    public WorkflowExecutionResult runReportSync(Long userId, String conversationId, String message) {
+        return workflowEngine.executeSync(admissionReportDefinition, userId, conversationId, message);
+    }
+
+    public String enqueueReport(Long userId, String conversationId, String message) {
+        if (workflowJobQueue == null) {
+            throw new IllegalStateException("async workflow queue is not enabled");
+        }
+        return workflowEngine.enqueue(
+                admissionReportDefinition,
+                userId,
+                conversationId,
+                message,
+                workflowJobQueue::enqueue);
+    }
+
+    public WorkflowExecutionResult runExisting(String runId) {
+        return workflowEngine.executeExisting(admissionReportDefinition, runId);
+    }
+
+    public boolean tryMarkRunning(String runId) {
+        return workflowRunRepository.tryMarkRunning(runId);
+    }
+
+    public int totalNodeCount() {
+        return admissionReportDefinition.nodes().size();
     }
 
     public Optional<WorkflowRunView> findRun(String runId) {

@@ -1,5 +1,6 @@
 package com.example.javaagentmvp.rag;
 
+import com.example.javaagentmvp.admissionworkflow.intent.ConversationTurnResolver;
 import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvisor;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
@@ -12,8 +13,11 @@ import org.springframework.context.annotation.Configuration;
 public class RagAdvisorConfiguration {
 
     @Bean
-    RagFlowStartAdvisor ragFlowStartAdvisor(RagRetrievalService ragRetrievalService, RagQueryRouter ragQueryRouter) {
-        return new RagFlowStartAdvisor(ragRetrievalService, ragQueryRouter);
+    RagFlowStartAdvisor ragFlowStartAdvisor(
+            RagRetrievalService ragRetrievalService,
+            RagQueryRouter ragQueryRouter,
+            ConversationTurnResolver turnResolver) {
+        return new RagFlowStartAdvisor(ragRetrievalService, ragQueryRouter, turnResolver);
     }
 
     @Bean

@@ -32,7 +32,7 @@ public class WorkflowRunRepository {
         this.objectMapper = objectMapper;
     }
 
-    public String createRun(
+    public String createPendingRun(
             String workflowType,
             Long userId,
             String conversationId,
@@ -42,7 +42,7 @@ public class WorkflowRunRepository {
         workflowRunMapper.insert(new WorkflowRunRecord(
                 runId,
                 workflowType,
-                WorkflowRunStatus.RUNNING.name(),
+                WorkflowRunStatus.PENDING.name(),
                 userId,
                 conversationId,
                 inputMessage,
@@ -52,6 +52,29 @@ public class WorkflowRunRepository {
                 now,
                 null));
         return runId;
+    }
+
+    /** @deprecated use {@link #createPendingRun} + {@link #markRunning} */
+    @Deprecated
+    public String createRun(
+            String workflowType,
+            Long userId,
+            String conversationId,
+            String inputMessage) {
+        String runId = createPendingRun(workflowType, userId, conversationId, inputMessage);
+        markRunning(runId);
+        return runId;
+    }
+
+    public void markRunning(String runId) {
+        Instant now = Instant.now();
+        workflowRunMapper.updateStatus(
+                runId, WorkflowRunStatus.RUNNING.name(), now, null, null);
+    }
+
+    public boolean tryMarkRunning(String runId) {
+        Instant now = Instant.now();
+        return workflowRunMapper.markRunningIfPending(runId, now) > 0;
     }
 
     public void markFailed(String runId, String errorMessage) {

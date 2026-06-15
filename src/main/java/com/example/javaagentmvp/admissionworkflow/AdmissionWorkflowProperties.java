@@ -7,7 +7,8 @@ public record AdmissionWorkflowProperties(
         boolean enabled,
         String defaultWorkflowType,
         boolean logCheckpoints,
-        SynthesisProperties synthesis) {
+        SynthesisProperties synthesis,
+        AsyncProperties async) {
 
     public AdmissionWorkflowProperties {
         if (defaultWorkflowType == null || defaultWorkflowType.isBlank()) {
@@ -15,6 +16,9 @@ public record AdmissionWorkflowProperties(
         }
         if (synthesis == null) {
             synthesis = SynthesisProperties.defaults();
+        }
+        if (async == null) {
+            async = AsyncProperties.defaults();
         }
     }
 }

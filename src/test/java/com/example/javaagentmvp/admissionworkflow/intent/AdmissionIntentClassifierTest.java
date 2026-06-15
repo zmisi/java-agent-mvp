@@ -35,7 +35,17 @@ class AdmissionIntentClassifierTest {
                         List.of(),
                         ""),
                 new RagProperties.Hybrid(true, 2, 3, 3, 60, 1.0, 0.9, "auto", "simple"));
-        classifier = new AdmissionIntentClassifier(new RagQueryRouter(properties), properties);
+        classifier = new AdmissionIntentClassifier(
+                new RagQueryRouter(properties, new ConversationTurnResolver()),
+                properties);
+    }
+
+    @Test
+    void classifiesRankIntent() {
+        assertThat(classifier.classify("安徽物理类620分排名多少"))
+                .isEqualTo(AdmissionIntent.RANK);
+        assertThat(classifier.classify("630分对应什么位次"))
+                .isEqualTo(AdmissionIntent.RANK);
     }
 
     @Test

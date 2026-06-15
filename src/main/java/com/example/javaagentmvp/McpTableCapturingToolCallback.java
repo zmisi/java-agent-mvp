@@ -1,20 +1,31 @@
 package com.example.javaagentmvp;
 
+import com.example.javaagentmvp.admissionworkflow.format.RankResponseFormatter;
+import com.example.javaagentmvp.admissionworkflow.intent.AdmissionInputParser;
+import com.example.javaagentmvp.admissionworkflow.intent.ResolvedTurnContext;
 import com.example.javaagentmvp.chat.ui.McpTableContext;
+import com.example.javaagentmvp.chat.ui.McpRankContext;
 import com.example.javaagentmvp.chat.ui.McpTableExtractor;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.definition.ToolDefinition;
 import org.springframework.ai.tool.metadata.ToolMetadata;
 
 import java.util.List;
+import java.util.Optional;
 
 /** Wraps MCP {@link ToolCallback} to capture structured tables for UI clients. */
 public final class McpTableCapturingToolCallback implements ToolCallback {
+
+    private static final Logger log = LoggerFactory.getLogger(McpTableCapturingToolCallback.class);
 
     static final int SCORE_TIER_DELTA = 15;
     private static final int MIN_SCORE = 200;
@@ -74,20 +85,35 @@ public final class McpTableCapturingToolCallback implements ToolCallback {
     @Override
     public String call(String toolInput, ToolContext toolContext) {
         String toolName = delegate.getToolDefinition().name();
+        if (isGetRankByScore(toolName)) {
+            String responseData = delegate.call(toolInput, toolContext);
+            captureRankResult(toolInput, toolContext, responseData);
+            return responseData;
+        }
         if (!isGetMajorByScore(toolName)) {
             String responseData = delegate.call(toolInput, toolContext);
             mcpTableExtractor.extract(toolName, toolInput, responseData).ifPresent(McpTableContext::add);
             return responseData;
         }
 
-        Integer baseScore = parseScore(toolInput);
-        if (baseScore == null) {
+        Integer llmScore = parseScore(toolInput);
+        Optional<Integer> baseScoreOpt = resolveUserScore(toolContext, llmScore);
+        if (baseScoreOpt.isEmpty()) {
             String responseData = delegate.call(toolInput, toolContext);
             mcpTableExtractor.extract(toolName, toolInput, responseData).ifPresent(McpTableContext::add);
             return responseData;
         }
 
-        String queryInput = withScore(toolInput, clampScore(baseScore + SCORE_TIER_DELTA));
+        int baseScore = baseScoreOpt.get();
+        if (llmScore != null && llmScore != baseScore) {
+            log.info(
+                    "getMajorByScore: using parsed userScore={} (llm passed score={})",
+                    baseScore,
+                    llmScore);
+        }
+
+        String userScoreInput = withScore(toolInput, baseScore);
+        String queryInput = withScore(userScoreInput, clampScore(baseScore + SCORE_TIER_DELTA));
         String responseData = delegate.call(queryInput, toolContext);
         JsonNode root = mcpTableExtractor.parseMajorByScoreRoot(responseData).orElse(null);
         if (root == null) {
@@ -100,9 +126,9 @@ public final class McpTableCapturingToolCallback implements ToolCallback {
         }
 
         TierBuckets buckets = classifyMajors(majorsNode, baseScore);
-        captureTierTable(toolInput, TIER_REACH, buckets.reach());
-        captureTierTable(toolInput, TIER_STEADY, buckets.steady());
-        captureTierTable(toolInput, TIER_SAFE, buckets.safe());
+        captureTierTable(userScoreInput, TIER_REACH, buckets.reach());
+        captureTierTable(userScoreInput, TIER_STEADY, buckets.steady());
+        captureTierTable(userScoreInput, TIER_SAFE, buckets.safe());
         return buildTieredResponse(baseScore, buckets);
     }
 
@@ -180,6 +206,115 @@ public final class McpTableCapturingToolCallback implements ToolCallback {
 
     private static boolean isGetMajorByScore(String toolName) {
         return toolName != null && toolName.contains("getMajorByScore");
+    }
+
+    private static boolean isGetRankByScore(String toolName) {
+        return toolName != null && toolName.contains("getRankByScore");
+    }
+
+    private void captureRankResult(String toolInput, ToolContext toolContext, String responseData) {
+        JsonNode root = mcpTableExtractor.parseMajorByScoreRoot(responseData).orElse(null);
+        if (root == null || !root.has("ranks") || !root.get("ranks").isArray() || root.get("ranks").isEmpty()) {
+            return;
+        }
+        Integer score = resolveRankScore(toolInput, toolContext);
+        String province = resolveRankProvince(toolInput, toolContext);
+        String formatted = RankResponseFormatter.format(root, score, province);
+        McpRankContext.set(new McpRankContext.RankCapture(root, score, province, formatted));
+    }
+
+    private Integer resolveRankScore(String toolInput, ToolContext toolContext) {
+        Optional<Integer> resolvedScore = ResolvedTurnContext.current()
+                .map(turn -> turn.slots().score());
+        if (resolvedScore.isPresent()) {
+            return resolvedScore.get();
+        }
+        Integer toolScore = parseScore(toolInput);
+        Optional<Integer> parsedFromMessage = parseScoreFromUserMessage(toolContext);
+        return parsedFromMessage.orElse(toolScore);
+    }
+
+    private String resolveRankProvince(String toolInput, ToolContext toolContext) {
+        Optional<String> resolvedProvince = ResolvedTurnContext.current()
+                .map(turn -> turn.slots().province())
+                .filter(province -> province != null && !province.isBlank());
+        if (resolvedProvince.isPresent()) {
+            return resolvedProvince.get();
+        }
+        String toolProvince = parseProvince(toolInput);
+        if (toolProvince != null && !toolProvince.isBlank()) {
+            return toolProvince;
+        }
+        return parseProvinceFromUserMessage(toolContext).orElse(null);
+    }
+
+    private String parseProvince(String toolInput) {
+        if (toolInput == null || toolInput.isBlank()) {
+            return null;
+        }
+        try {
+            JsonNode node = objectMapper.readTree(toolInput);
+            JsonNode provinceNode = node.get("province");
+            if (provinceNode == null || provinceNode.isNull()) {
+                return null;
+            }
+            String province = provinceNode.asText("").strip();
+            return province.isBlank() ? null : province;
+        }
+        catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private static Optional<String> parseProvinceFromUserMessage(ToolContext toolContext) {
+        if (toolContext == null) {
+            return Optional.empty();
+        }
+        List<Message> history = toolContext.getToolCallHistory();
+        if (history == null || history.isEmpty()) {
+            return Optional.empty();
+        }
+        for (int i = history.size() - 1; i >= 0; i--) {
+            Message message = history.get(i);
+            if (message instanceof UserMessage userMessage) {
+                AdmissionInputParser.ParsedAdmissionInput parsed =
+                        AdmissionInputParser.parse(userMessage.getText());
+                if (parsed.province() != null && !parsed.province().isBlank()) {
+                    return Optional.of(parsed.province());
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
+    private Optional<Integer> resolveUserScore(ToolContext toolContext, Integer llmScore) {
+        Optional<Integer> resolvedScore = ResolvedTurnContext.current()
+                .map(turn -> turn.slots().score());
+        if (resolvedScore.isPresent()) {
+            return resolvedScore;
+        }
+        Optional<Integer> parsedFromMessage = parseScoreFromUserMessage(toolContext);
+        if (parsedFromMessage.isPresent()) {
+            return parsedFromMessage;
+        }
+        return Optional.ofNullable(llmScore);
+    }
+
+    private static Optional<Integer> parseScoreFromUserMessage(ToolContext toolContext) {
+        if (toolContext == null) {
+            return Optional.empty();
+        }
+        List<Message> history = toolContext.getToolCallHistory();
+        if (history == null || history.isEmpty()) {
+            return Optional.empty();
+        }
+        for (int i = history.size() - 1; i >= 0; i--) {
+            Message message = history.get(i);
+            if (message instanceof UserMessage userMessage) {
+                return AdmissionInputParser.parseScore(userMessage.getText());
+            }
+        }
+        return Optional.empty();
     }
 
     private Integer parseScore(String toolInput) {

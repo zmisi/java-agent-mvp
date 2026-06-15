@@ -32,11 +32,15 @@ public class AdmissionIntentClassifier {
         }
 
         boolean hasScore = hasAdmissionScore(normalized);
+        boolean hasRank = hasScore && AdmissionRankQuery.isRankQuery(normalized);
         boolean hasPolicy = POLICY_PATTERN.matcher(normalized).find()
                 || matchesRagIntent(normalized);
 
         if (hasScore && hasPolicy) {
             return AdmissionIntent.REPORT;
+        }
+        if (hasRank) {
+            return AdmissionIntent.RANK;
         }
         if (hasScore) {
             return AdmissionIntent.SCORE;
@@ -48,6 +52,9 @@ public class AdmissionIntentClassifier {
         RagQueryRouter.Decision decision = ragQueryRouter.decide(normalized);
         if (decision.useRag()) {
             return AdmissionIntent.POLICY;
+        }
+        if (decision.reason() != null && decision.reason().contains("getRankByScore")) {
+            return AdmissionIntent.RANK;
         }
         if (decision.reason() != null && decision.reason().contains("getMajorByScore")) {
             return AdmissionIntent.SCORE;

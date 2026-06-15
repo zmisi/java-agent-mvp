@@ -4,7 +4,7 @@ university_code: HFUU
 doc_type: admission_scores
 year: 2023-2025
 source_url: https://www.hfuu.edu.cn/zs/49/4c/c4259a84300/page.htm
-fetched_at: 2026-05-27T04:32:57+00:00
+fetched_at: 2026-06-03T01:55:46+00:00
 ---
 
 # 合肥大学近三年各省非艺术类专业最低录取分数线（2023-2025年）
