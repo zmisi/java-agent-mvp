@@ -1002,8 +1002,14 @@ const COLUMN_LAYOUT = {
   max_score: { minWidthPx: 48, align: "left", wrap: false },
   year: { minWidthPx: 40, align: "left", wrap: false },
   subject_group: { minWidthPx: 48, align: "left", wrap: false },
+  year_label: { minWidthPx: 88, align: "left", wrap: false },
+  rank_range: { minWidthPx: 80, align: "left", wrap: false },
+  segment_count: { minWidthPx: 72, align: "left", wrap: false },
+  source_label: { minWidthPx: 88, align: "left", wrap: false },
   admission_type: { minWidthPx: 52, align: "left", wrap: false },
 };
+
+const RANK_STRONG_KEYS = new Set(["year_label", "rank_range", "segment_count"]);
 
 const DEFAULT_COLUMN_LAYOUT = { minWidthPx: 60, align: "left", wrap: false };
 
@@ -1071,6 +1077,55 @@ function formatTableCell(value) {
   return escapeHtml(String(value));
 }
 
+function isRankTable(table) {
+  return (table.columns || []).some(
+    (col) => col.key === "year_label" || col.key === "rank_range",
+  );
+}
+
+function isPublicSourceUrl(url) {
+  const text = String(url || "").trim();
+  return text.startsWith("http://") || text.startsWith("https://");
+}
+
+function formatRankSourceCell(row) {
+  const url = String(row.source_url || "").trim();
+  if (isPublicSourceUrl(url)) {
+    return `<span class="rank-source"><span class="rank-source-icon" aria-hidden="true">✅</span>官方已公布 <a class="rank-source-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">来源</a></span>`;
+  }
+  return `<span class="rank-source"><span class="rank-source-icon" aria-hidden="true">✅</span>${formatTableCell(row.source_label || "官方已公布")}</span>`;
+}
+
+function renderRankTable(table) {
+  const columns = (table.columns || []).map((col) => ({
+    key: col.key,
+    label: col.label,
+    strong: RANK_STRONG_KEYS.has(col.key),
+    ...layoutForColumn(col.key),
+  }));
+  const rows = table.rows || [];
+  const tableMinWidth = columns.reduce((sum, col) => sum + col.minWidthPx, 0);
+  const head = columns
+    .map((col) => `<th scope="col">${escapeHtml(col.label)}</th>`)
+    .join("");
+  const body = rows
+    .map((row) => {
+      const cells = columns
+        .map((col) => {
+          if (col.key === "source_label") {
+            return `<td>${formatRankSourceCell(row)}</td>`;
+          }
+          const value = formatTableCell(row[col.key]);
+          const cls = col.strong ? ' class="rank-cell-strong"' : "";
+          return `<td${cls}>${value}</td>`;
+        })
+        .join("");
+      return `<tr>${cells}</tr>`;
+    })
+    .join("");
+  return `<div class="rank-result-wrap"><table class="rank-result-table" style="min-width:${tableMinWidth}px"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+}
+
 function tierKeyFromTitle(title) {
   if (!title) {
     return "default";
@@ -1119,6 +1174,9 @@ function renderFlatChatTable(table) {
 }
 
 function renderChatTable(table) {
+  if (isRankTable(table)) {
+    return renderRankTable(table);
+  }
   const tier = tierKeyFromTitle(table.title);
   const groups = table.groups || [];
   const rows = table.rows || [];
@@ -1132,7 +1190,7 @@ function renderChatTable(table) {
     body = renderFlatChatTable(table);
   }
   return `<section class="chat-table-tier chat-table-tier-${tier}">
-    <h4 class="chat-table-tier-title">${escapeHtml(table.title || "查询结果")}</h4>
+    ${table.title ? `<h4 class="chat-table-tier-title">${escapeHtml(table.title)}</h4>` : ""}
     <div class="chat-table-tier-body">${body}</div>
   </section>`;
 }

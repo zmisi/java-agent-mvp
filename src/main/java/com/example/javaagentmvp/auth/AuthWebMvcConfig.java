@@ -29,7 +29,7 @@ public class AuthWebMvcConfig implements WebMvcConfigurer {
                 .addPathPatterns("/api/auth/wechat/login", "/api/auth/web/login");
         registry.addInterceptor(authInterceptor)
                 .addPathPatterns("/api/**")
-                .excludePathPatterns("/api/auth/wechat/login", "/api/auth/web/login");
+                .excludePathPatterns("/api/auth/wechat/login", "/api/auth/web/login", "/api/public/**");
     }
 
     @Override

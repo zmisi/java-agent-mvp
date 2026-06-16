@@ -1,32 +1,23 @@
 package com.example.javaagentmvp.web;
 
-import com.example.javaagentmvp.QwenApiLoggingAdvisor;
 import com.example.javaagentmvp.auth.AuthRequestSupport;
 import com.example.javaagentmvp.auth.AuthenticatedUser;
-import com.example.javaagentmvp.auth.UserRole;
 import com.example.javaagentmvp.chat.AgentConversationRepository;
+import com.example.javaagentmvp.chat.ChatTurnService;
 import com.example.javaagentmvp.chat.ConversationAccessService;
-import com.example.javaagentmvp.chat.PostgresChatMemory;
-import com.example.javaagentmvp.chat.context.ChatContextUsageRegistry;
-import jakarta.servlet.http.HttpServletRequest;
 import com.example.javaagentmvp.chat.context.ContextUsageResponse;
 import com.example.javaagentmvp.chat.context.ConversationCompactionService;
 import com.example.javaagentmvp.chat.context.ConversationTurnSummaryBuffer;
 import com.example.javaagentmvp.chat.ui.ChatTable;
-import com.example.javaagentmvp.chat.ui.McpTableContext;
-import com.example.javaagentmvp.chat.ui.McpRankContext;
-import com.example.javaagentmvp.admissionworkflow.intent.ResolvedTurnContext;
-import com.example.javaagentmvp.rag.RagFlowContext;
 import com.example.javaagentmvp.rag.RagSource;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
@@ -38,39 +29,28 @@ import java.util.List;
 @RequestMapping("/api/conversations")
 public class ChatController {
 
-    private final ChatClient chatClient;
-
-    private final QwenApiLoggingAdvisor qwenApiLoggingAdvisor;
+    private final ChatTurnService chatTurnService;
 
     private final AgentConversationRepository conversationRepository;
 
-    private final ChatContextUsageRegistry chatContextUsageRegistry;
     private final ConversationCompactionService conversationCompactionService;
     private final ConversationTurnSummaryBuffer turnSummaryBuffer;
     private final ConversationAccessService conversationAccess;
 
-    private final PostgresChatMemory postgresChatMemory;
-
     private final String activeProvider;
 
     public ChatController(
-            ChatClient chatClient,
-            QwenApiLoggingAdvisor qwenApiLoggingAdvisor,
+            ChatTurnService chatTurnService,
             AgentConversationRepository conversationRepository,
-            ChatContextUsageRegistry chatContextUsageRegistry,
             ConversationCompactionService conversationCompactionService,
             ConversationTurnSummaryBuffer turnSummaryBuffer,
             ConversationAccessService conversationAccess,
-            PostgresChatMemory postgresChatMemory,
             @Value("${app.llm.provider:local}") String activeProvider) {
-        this.chatClient = chatClient;
-        this.qwenApiLoggingAdvisor = qwenApiLoggingAdvisor;
+        this.chatTurnService = chatTurnService;
         this.conversationRepository = conversationRepository;
-        this.chatContextUsageRegistry = chatContextUsageRegistry;
         this.conversationCompactionService = conversationCompactionService;
         this.turnSummaryBuffer = turnSummaryBuffer;
         this.conversationAccess = conversationAccess;
-        this.postgresChatMemory = postgresChatMemory;
         this.activeProvider = activeProvider.strip().toLowerCase();
     }
 
@@ -88,47 +68,15 @@ public class ChatController {
         conversationAccess.requireAccess(conversationId, user);
 
         String message = body.message().strip();
-
         try {
-            qwenApiLoggingAdvisor.resetSessionRound();
-            String reply = chatClient.prompt()
-                    .user(message)
-                    .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, conversationId))
-                    .call()
-                    .content();
-
-            reply = applyDeterministicRankReply(conversationId, reply);
-
-            ContextUsageResponse contextUsage = chatContextUsageRegistry.consume();
-            turnSummaryBuffer.appendTurn(conversationId, message, reply);
+            ChatReplyDto reply = chatTurnService.execute(conversationId, message);
+            turnSummaryBuffer.appendTurn(conversationId, message, reply.assistant());
             touchConversation(conversationId, message, user);
-            List<ChatTable> tables = resolveReplyTables(conversationId);
-            if (!tables.isEmpty()) {
-                postgresChatMemory.attachUiTablesToLatestAssistant(conversationId, tables);
-            }
-            return new ChatReplyDto(reply, RagFlowContext.sources(), tables, contextUsage);
+            return reply;
         }
         catch (RuntimeException ex) {
-            chatContextUsageRegistry.consume();
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, ex.getMessage(), ex);
         }
-        finally {
-            RagFlowContext.clear();
-            McpTableContext.clear();
-            McpRankContext.clear();
-            ResolvedTurnContext.clear();
-        }
-    }
-
-    private String applyDeterministicRankReply(String conversationId, String llmReply) {
-        return McpRankContext.capture()
-                .map(McpRankContext.RankCapture::formatted)
-                .filter(formatted -> formatted != null && !formatted.isBlank())
-                .map(formatted -> {
-                    postgresChatMemory.replaceLatestAssistantText(conversationId, formatted);
-                    return formatted;
-                })
-                .orElse(llmReply);
     }
 
     @PostMapping("/{conversationId}/compact")
@@ -183,10 +131,6 @@ public class ChatController {
                 result.afterMessageCount(),
                 result.beforeEstimatedTokens(),
                 result.afterEstimatedTokens());
-    }
-
-    private List<ChatTable> resolveReplyTables(String conversationId) {
-        return McpTableContext.tables();
     }
 
     private void touchConversation(String conversationId, String message, AuthenticatedUser user) {

@@ -20,7 +20,7 @@ public final class ApiAccessPolicy {
             return false;
         }
         String path = normalize(uri);
-        return MINI_PROGRAM_LOGIN_PATH.equals(path) || WEB_LOGIN_PATH.equals(path);
+        return MINI_PROGRAM_LOGIN_PATH.equals(path) || WEB_LOGIN_PATH.equals(path) || path.startsWith("/api/public/");
     }
 
     public static boolean isAllowed(UserRole role, String uri) {

@@ -220,6 +220,7 @@ public final class McpTableCapturingToolCallback implements ToolCallback {
         Integer score = resolveRankScore(toolInput, toolContext);
         String province = resolveRankProvince(toolInput, toolContext);
         String formatted = RankResponseFormatter.format(root, score, province);
+        mcpTableExtractor.extractRankByScore(root, score, province).ifPresent(McpTableContext::add);
         McpRankContext.set(new McpRankContext.RankCapture(root, score, province, formatted));
     }
 

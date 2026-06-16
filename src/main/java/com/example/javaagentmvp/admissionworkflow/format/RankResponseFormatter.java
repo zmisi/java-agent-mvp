@@ -15,6 +15,30 @@ public final class RankResponseFormatter {
     private RankResponseFormatter() {
     }
 
+    public static String formatIntro(JsonNode rankResult, Integer score, String province) {
+        if (rankResult == null || !rankResult.has("ranks") || !rankResult.get("ranks").isArray()) {
+            return "未能查询到该分数对应的位次，请补充省份、科类或年份。";
+        }
+        JsonNode ranks = rankResult.get("ranks");
+        if (ranks.isEmpty()) {
+            return "未能查询到该分数对应的位次，请补充省份、科类或年份。";
+        }
+
+        int queryScore = resolveScore(score, ranks);
+        String queryProvince = resolveProvince(province, ranks);
+        if (queryProvince != null && !queryProvince.isBlank()) {
+            return String.format(
+                    Locale.ROOT,
+                    "根据已导入的省级一分一段表，%s %d分 对应位次如下（均为官方公布数据）：",
+                    queryProvince,
+                    queryScore);
+        }
+        return String.format(
+                Locale.ROOT,
+                "根据已导入的省级一分一段表，%d分 对应位次如下（均为官方公布数据）：",
+                queryScore);
+    }
+
     public static String format(JsonNode rankResult, Integer score, String province) {
         if (rankResult == null || !rankResult.has("ranks") || !rankResult.get("ranks").isArray()) {
             return "未能查询到该分数对应的位次，请补充省份、科类或年份。";
@@ -51,16 +75,10 @@ public final class RankResponseFormatter {
         appendHeaderCell(out, "数据来源");
         out.append("</tr></thead><tbody>");
 
-        List<JsonNode> rows = new ArrayList<>();
-        ranks.forEach(rows::add);
-        rows.sort(Comparator
-                .comparingInt((JsonNode r) -> r.path("year").asInt(0)).reversed()
-                .thenComparing(r -> r.path("subject_group").asText("")));
-
-        for (JsonNode row : rows) {
+        for (JsonNode row : sortedRankRows(ranks)) {
             out.append("<tr>");
             appendDataCell(out, formatYearLabel(row, queryScore), true);
-            appendDataCell(out, row.path("subject_group").asText(""), false);
+            appendDataCell(out, escapeHtml(row.path("subject_group").asText("")), false);
             appendDataCell(out, formatRankRange(row), true);
             appendDataCell(out, formatSegmentCount(row), true);
             appendDataCell(out, formatSourceHtml(row), false);
@@ -81,6 +99,58 @@ public final class RankResponseFormatter {
             out.append(" class=\"rank-cell-strong\"");
         }
         out.append('>').append(text).append("</td>");
+    }
+
+    public static List<JsonNode> sortedRankRows(JsonNode ranks) {
+        List<JsonNode> rows = new ArrayList<>();
+        ranks.forEach(rows::add);
+        rows.sort(Comparator
+                .comparingInt((JsonNode r) -> r.path("year").asInt(0)).reversed()
+                .thenComparing(r -> r.path("subject_group").asText("")));
+        return rows;
+    }
+
+    public static String yearLabelPlain(JsonNode row, int score) {
+        int year = row.path("year").asInt(0);
+        if (year <= 0) {
+            return score + "分";
+        }
+        return year + "年 · " + score + "分";
+    }
+
+    public static String rankRangePlain(JsonNode row) {
+        if (row.hasNonNull("rank")) {
+            return formatNumber(row.path("rank").asInt());
+        }
+        int min = row.path("rank_min").asInt(-1);
+        int max = row.path("rank_max").asInt(-1);
+        if (min < 0 || max < 0) {
+            return "—";
+        }
+        if (min == max) {
+            return formatNumber(min);
+        }
+        return formatNumber(min) + "–" + formatNumber(max);
+    }
+
+    public static String segmentCountPlain(JsonNode row) {
+        if (!row.has("segment_count")) {
+            return "—";
+        }
+        int count = row.path("segment_count").asInt(-1);
+        return count >= 0 ? count + "人" : "—";
+    }
+
+    public static String sourceLabelPlain(JsonNode row) {
+        String url = row.path("source_url").asText("").strip();
+        if (!url.isBlank()) {
+            return "✅ 官方已公布";
+        }
+        String provider = row.path("source_provider").asText("").strip();
+        if (!provider.isBlank()) {
+            return "✅ 官方已公布（" + provider + "）";
+        }
+        return "✅ 官方已公布";
     }
 
     private static int resolveScore(Integer score, JsonNode ranks) {
@@ -106,34 +176,15 @@ public final class RankResponseFormatter {
     }
 
     private static String formatYearLabel(JsonNode row, int score) {
-        int year = row.path("year").asInt(0);
-        if (year <= 0) {
-            return escapeHtml(score + "分");
-        }
-        return escapeHtml(year + "年 · " + score + "分");
+        return escapeHtml(yearLabelPlain(row, score));
     }
 
     private static String formatRankRange(JsonNode row) {
-        if (row.hasNonNull("rank")) {
-            return escapeHtml(formatNumber(row.path("rank").asInt()));
-        }
-        int min = row.path("rank_min").asInt(-1);
-        int max = row.path("rank_max").asInt(-1);
-        if (min < 0 || max < 0) {
-            return "—";
-        }
-        if (min == max) {
-            return escapeHtml(formatNumber(min));
-        }
-        return escapeHtml(formatNumber(min) + "–" + formatNumber(max));
+        return escapeHtml(rankRangePlain(row));
     }
 
     private static String formatSegmentCount(JsonNode row) {
-        if (!row.has("segment_count")) {
-            return "—";
-        }
-        int count = row.path("segment_count").asInt(-1);
-        return count >= 0 ? escapeHtml(count + "人") : "—";
+        return escapeHtml(segmentCountPlain(row));
     }
 
     private static String formatSourceHtml(JsonNode row) {

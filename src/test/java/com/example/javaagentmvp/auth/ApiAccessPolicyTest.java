@@ -26,5 +26,6 @@ class ApiAccessPolicyTest {
     void loginPathIsPublic() {
         assertThat(ApiAccessPolicy.isPublicPath("/api/auth/wechat/login")).isTrue();
         assertThat(ApiAccessPolicy.isPublicPath("/api/auth/web/login")).isTrue();
+        assertThat(ApiAccessPolicy.isPublicPath("/api/public/chat")).isTrue();
     }
 }

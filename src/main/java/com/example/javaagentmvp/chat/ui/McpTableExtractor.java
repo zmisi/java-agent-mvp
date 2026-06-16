@@ -1,5 +1,6 @@
 package com.example.javaagentmvp.chat.ui;
 
+import com.example.javaagentmvp.admissionworkflow.format.RankResponseFormatter;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -24,6 +25,13 @@ public class McpTableExtractor {
             new ChatTableColumn("year", "年份"),
             new ChatTableColumn("subject_group", "科类"),
             new ChatTableColumn("admission_type", "批次"));
+
+    private static final List<ChatTableColumn> RANK_BY_SCORE_COLUMNS = List.of(
+            new ChatTableColumn("year_label", "年份"),
+            new ChatTableColumn("subject_group", "科类"),
+            new ChatTableColumn("rank_range", "位次区间"),
+            new ChatTableColumn("segment_count", "同分数段人数"),
+            new ChatTableColumn("source_label", "数据来源"));
 
     private final ObjectMapper objectMapper;
 
@@ -58,6 +66,34 @@ public class McpTableExtractor {
             return Optional.empty();
         }
         return buildMajorByScoreTable(toolInput, majorsNode, tierLabel);
+    }
+
+    public Optional<ChatTable> extractRankByScore(JsonNode root, Integer score, String province) {
+        if (root == null || !root.has("ranks") || !root.get("ranks").isArray()) {
+            return Optional.empty();
+        }
+        JsonNode ranks = root.get("ranks");
+        if (ranks.isEmpty()) {
+            return Optional.empty();
+        }
+        int queryScore = score != null
+                ? score
+                : ranks.get(0).path("score").asInt(0);
+        List<Map<String, String>> rows = new ArrayList<>();
+        for (JsonNode rank : RankResponseFormatter.sortedRankRows(ranks)) {
+            Map<String, String> row = new LinkedHashMap<>();
+            row.put("year_label", RankResponseFormatter.yearLabelPlain(rank, queryScore));
+            row.put("subject_group", formatCell(rank.get("subject_group")));
+            row.put("rank_range", RankResponseFormatter.rankRangePlain(rank));
+            row.put("segment_count", RankResponseFormatter.segmentCountPlain(rank));
+            row.put("source_label", RankResponseFormatter.sourceLabelPlain(rank));
+            String sourceUrl = rank.path("source_url").asText("").strip();
+            if (!sourceUrl.isBlank()) {
+                row.put("source_url", sourceUrl);
+            }
+            rows.add(row);
+        }
+        return Optional.of(new ChatTable("", RANK_BY_SCORE_COLUMNS, rows));
     }
 
     public String unwrapToolPayload(String responseData) {

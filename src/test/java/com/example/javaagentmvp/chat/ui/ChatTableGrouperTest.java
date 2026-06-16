@@ -65,6 +65,27 @@ class ChatTableGrouperTest {
     }
 
     @Test
+    void withGroupsSkipsRankTables() {
+        List<ChatTableColumn> columns = List.of(
+                new ChatTableColumn("year_label", "年份"),
+                new ChatTableColumn("subject_group", "科类"),
+                new ChatTableColumn("rank_range", "位次区间"),
+                new ChatTableColumn("segment_count", "同分数段人数"),
+                new ChatTableColumn("source_label", "数据来源"));
+        Map<String, String> rankRow = new LinkedHashMap<>();
+        rankRow.put("year_label", "2025年 · 630分");
+        rankRow.put("subject_group", "历史类");
+        rankRow.put("rank_range", "714–763");
+        rankRow.put("segment_count", "50人");
+        rankRow.put("source_label", "✅ 官方已公布");
+
+        ChatTable rankTable = ChatTableGrouper.withGroups(new ChatTable("", columns, List.of(rankRow)));
+
+        assertTrue(rankTable.groups().isEmpty());
+        assertEquals("714–763", rankTable.rows().get(0).get("rank_range"));
+    }
+
+    @Test
     void emptyRowsProduceEmptyGroups() {
         assertTrue(ChatTableGrouper.groupMajorRows(List.of()).isEmpty());
         ChatTable table = ChatTableGrouper.withGroups(new ChatTable("冲", List.of(), List.of()));

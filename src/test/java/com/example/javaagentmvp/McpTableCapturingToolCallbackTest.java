@@ -263,6 +263,14 @@ class McpTableCapturingToolCallbackTest {
         assertTrue(formatted.contains("130人"));
         assertTrue(formatted.contains("官方已公布"));
         assertTrue(formatted.contains("rank-source-link"));
+
+        List<ChatTable> tables = McpTableContext.tables();
+        assertEquals(1, tables.size());
+        ChatTable rankTable = tables.get(0);
+        assertEquals("", rankTable.title());
+        assertEquals(1, rankTable.rows().size());
+        assertEquals("2025年 · 600分", rankTable.rows().get(0).get("year_label"));
+        assertEquals("3,286–3,415", rankTable.rows().get(0).get("rank_range"));
     }
 
     @Test

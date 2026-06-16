@@ -49,7 +49,18 @@ public final class ChatTableGrouper {
         if (table.groups() != null && !table.groups().isEmpty()) {
             return table;
         }
+        if (isRankTable(table)) {
+            return table;
+        }
         return new ChatTable(table.title(), table.columns(), table.rows(), groupMajorRows(table.rows()));
+    }
+
+    private static boolean isRankTable(ChatTable table) {
+        if (table.columns() == null || table.columns().isEmpty()) {
+            return false;
+        }
+        return table.columns().stream()
+                .anyMatch(column -> "year_label".equals(column.key()) || "rank_range".equals(column.key()));
     }
 
     public static List<ChatTable> enrichTables(List<ChatTable> tables) {

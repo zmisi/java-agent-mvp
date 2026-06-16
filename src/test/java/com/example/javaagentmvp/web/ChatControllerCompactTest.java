@@ -1,18 +1,15 @@
 package com.example.javaagentmvp.web;
 
-import com.example.javaagentmvp.QwenApiLoggingAdvisor;
 import com.example.javaagentmvp.auth.AuthInterceptor;
 import com.example.javaagentmvp.auth.AuthenticatedUser;
 import com.example.javaagentmvp.auth.UserRole;
 import com.example.javaagentmvp.chat.AgentConversationRepository;
+import com.example.javaagentmvp.chat.ChatTurnService;
 import com.example.javaagentmvp.chat.ConversationAccessService;
-import com.example.javaagentmvp.chat.PostgresChatMemory;
-import com.example.javaagentmvp.chat.context.ChatContextUsageRegistry;
 import com.example.javaagentmvp.chat.context.ConversationCompactionService;
 import com.example.javaagentmvp.chat.context.ConversationTurnSummaryBuffer;
 import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.Test;
-import org.springframework.ai.chat.client.ChatClient;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -112,14 +109,11 @@ class ChatControllerCompactTest {
             AgentConversationRepository conversationRepository,
             ConversationAccessService conversationAccess) {
         return new ChatController(
-                mock(ChatClient.class),
-                mock(QwenApiLoggingAdvisor.class),
+                mock(ChatTurnService.class),
                 conversationRepository,
-                mock(ChatContextUsageRegistry.class),
                 compactionService,
                 mock(ConversationTurnSummaryBuffer.class),
                 conversationAccess,
-                mock(PostgresChatMemory.class),
                 "local");
     }
 

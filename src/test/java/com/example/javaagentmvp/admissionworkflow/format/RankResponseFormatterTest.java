@@ -10,6 +10,33 @@ class RankResponseFormatterTest {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Test
+    void formatIntroUsesPlainTextWithoutHtmlTable() throws Exception {
+        String json = """
+                {
+                  "count": 1,
+                  "ranks": [
+                    {
+                      "year": 2025,
+                      "province": "安徽",
+                      "subject_group": "历史类",
+                      "score": 600,
+                      "rank_min": 3286,
+                      "rank_max": 3415,
+                      "segment_count": 130,
+                      "source_url": "https://example.com/2025-history"
+                    }
+                  ]
+                }
+                """;
+        String intro = RankResponseFormatter.formatIntro(objectMapper.readTree(json), 600, "安徽");
+
+        assertThat(intro).contains("安徽 600分");
+        assertThat(intro).doesNotContain("rank-result-table");
+        assertThat(intro).doesNotContain("<table");
+        assertThat(intro).doesNotContain("**");
+    }
+
+    @Test
     void formatsConsistentTableAcrossYears() throws Exception {
         String json = """
                 {
