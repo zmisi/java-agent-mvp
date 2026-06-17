@@ -35,3 +35,7 @@ build/
 *.DS_Store
 compaction-architecture-analysis.html
 eval/reports/
+admission-compiler/.venv/
+admission-compiler/**/__pycache__/
+admission-compiler/**/*.pyc
+admission-compiler/.pytest_cache/

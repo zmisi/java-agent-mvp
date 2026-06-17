@@ -330,6 +330,16 @@ EVAL_LIVE=1 mvn test -Peval-live
 
 Live 报告输出：`eval/reports/latest.md`。
 
+### NL → IR 编译器（admission-compiler）
+
+复杂约束解析（如「长三角、不当老师、央国企」）见 [admission-compiler/README.md](admission-compiler/README.md)。
+
+```bash
+cd admission-compiler && python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+python eval/run_eval.py    # 9/9 golden cases，无需 API Key
+```
+
 ## 故障排查
 
 - **MyBatis 启动失败、指向已删除的 `*Mapper.xml`**：源码已删但 `target/classes/mapper/` 仍有旧文件。执行 `mvn clean spring-boot:run`（或 `mvn clean package` 后再启动）。

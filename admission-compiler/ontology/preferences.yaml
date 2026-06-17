@@ -1,0 +1,11 @@
+# Soft constraints for ranking (planner uses later; compiler only tags them)
+preferences:
+  就业前景:
+    dimension: employment_outlook
+    aliases: [就业前景好, 就业前景比较好, 好就业, 就业好, 就业率]
+  收入:
+    dimension: salary
+    aliases: [收入高, 收入比较高, 薪资高, 工资高, 待遇好]
+  央国企:
+    dimension: state_owned_employability
+    aliases: [进央国企, 能进央国企, 国企, 央企, 体制内, 铁饭碗]

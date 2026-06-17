@@ -1,0 +1,253 @@
+{
+  "$defs": {
+    "Filters": {
+      "properties": {
+        "exclude_school_name_contains": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Exclude School Name Contains",
+          "type": "array"
+        },
+        "exclude_major_keywords": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Exclude Major Keywords",
+          "type": "array"
+        },
+        "include_major_keywords": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Include Major Keywords",
+          "type": "array"
+        },
+        "include_schools": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Include Schools",
+          "type": "array"
+        }
+      },
+      "title": "Filters",
+      "type": "object"
+    },
+    "ParseTrace": {
+      "properties": {
+        "rules_applied": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Rules Applied",
+          "type": "array"
+        },
+        "ontology_hits": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Ontology Hits",
+          "type": "array"
+        },
+        "llm_used": {
+          "default": false,
+          "title": "Llm Used",
+          "type": "boolean"
+        }
+      },
+      "title": "ParseTrace",
+      "type": "object"
+    },
+    "Preference": {
+      "properties": {
+        "dimension": {
+          "$ref": "#/$defs/PreferenceDimension"
+        },
+        "weight": {
+          "default": 1.0,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Weight",
+          "type": "number"
+        },
+        "raw_phrase": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Raw Phrase"
+        }
+      },
+      "required": [
+        "dimension"
+      ],
+      "title": "Preference",
+      "type": "object"
+    },
+    "PreferenceDimension": {
+      "enum": [
+        "employment_outlook",
+        "salary",
+        "state_owned_employability"
+      ],
+      "title": "PreferenceDimension",
+      "type": "string"
+    },
+    "RegionRef": {
+      "properties": {
+        "phrase": {
+          "title": "Phrase",
+          "type": "string"
+        },
+        "provinces": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Provinces",
+          "type": "array"
+        }
+      },
+      "required": [
+        "phrase",
+        "provinces"
+      ],
+      "title": "RegionRef",
+      "type": "object"
+    },
+    "Slots": {
+      "properties": {
+        "score": {
+          "anyOf": [
+            {
+              "maximum": 750,
+              "minimum": 200,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Score"
+        },
+        "provinces": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Provinces",
+          "type": "array"
+        },
+        "subject_group": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject Group"
+        },
+        "year": {
+          "anyOf": [
+            {
+              "maximum": 2030,
+              "minimum": 2020,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Year"
+        },
+        "admission_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Admission Type"
+        }
+      },
+      "title": "Slots",
+      "type": "object"
+    },
+    "Task": {
+      "enum": [
+        "search_majors",
+        "search_rank",
+        "policy_qa",
+        "report",
+        "unknown"
+      ],
+      "title": "Task",
+      "type": "string"
+    }
+  },
+  "description": "Structured compile result for one user turn.",
+  "properties": {
+    "task": {
+      "$ref": "#/$defs/Task"
+    },
+    "slots": {
+      "$ref": "#/$defs/Slots"
+    },
+    "filters": {
+      "$ref": "#/$defs/Filters"
+    },
+    "preferences": {
+      "items": {
+        "$ref": "#/$defs/Preference"
+      },
+      "title": "Preferences",
+      "type": "array"
+    },
+    "regions": {
+      "items": {
+        "$ref": "#/$defs/RegionRef"
+      },
+      "title": "Regions",
+      "type": "array"
+    },
+    "needs_clarification": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Needs Clarification",
+      "type": "array"
+    },
+    "confidence": {
+      "default": 0.0,
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "title": "Confidence",
+      "type": "number"
+    },
+    "raw_message": {
+      "default": "",
+      "title": "Raw Message",
+      "type": "string"
+    },
+    "parse_trace": {
+      "$ref": "#/$defs/ParseTrace"
+    }
+  },
+  "required": [
+    "task"
+  ],
+  "title": "AdmissionQuery",
+  "type": "object"
+}
