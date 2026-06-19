@@ -10,10 +10,17 @@ import com.example.javaagentmvp.admissionworkflow.engine.WorkflowExecutionResult
 import com.example.javaagentmvp.admissionworkflow.engine.WorkflowRunStatus;
 import com.example.javaagentmvp.admissionworkflow.intent.AdmissionIntentClassifier;
 import com.example.javaagentmvp.admissionworkflow.intent.ConversationTurnResolver;
+import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionCompilerProperties;
+import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionOntologyRegistry;
+import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionPriorSlotsBuilder;
+import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionQueryCompileService;
+import com.example.javaagentmvp.admissionworkflow.compiler.IntentServiceClient;
+import com.example.javaagentmvp.admissionworkflow.compiler.LocalAdmissionQueryCompiler;
+import com.example.javaagentmvp.admissionworkflow.nodes.CompileQueryNode;
 import com.example.javaagentmvp.admissionworkflow.nodes.FilterScoreMajorsNode;
 import com.example.javaagentmvp.admissionworkflow.nodes.FormatResponseNode;
-import com.example.javaagentmvp.admissionworkflow.nodes.IntentClassifyNode;
 import com.example.javaagentmvp.admissionworkflow.nodes.PolicyRagNode;
+import com.example.javaagentmvp.admissionworkflow.nodes.PreferenceRagNode;
 import com.example.javaagentmvp.admissionworkflow.nodes.ScoreToolNode;
 import com.example.javaagentmvp.admissionworkflow.nodes.VerifyAnswerNode;
 import com.example.javaagentmvp.admissionworkflow.persistence.WorkflowRunRepository;
@@ -95,7 +102,7 @@ class WorkflowDeterministicEvalTest {
         }
     }
 
-    private void runCase(EvalCaseLoader.WorkflowEvalCase evalCase) {
+    private void runCase(EvalCaseLoader.WorkflowEvalCase evalCase) throws Exception {
         String runId = "eval-" + evalCase.id();
         when(workflowRunRepository.createPendingRun(any(), any(), any(), eq(evalCase.input()))).thenReturn(runId);
         when(workflowRunRepository.findSummary(runId)).thenReturn(Optional.of(runRow(runId, evalCase.input())));
@@ -146,19 +153,37 @@ class WorkflowDeterministicEvalTest {
         if (evalCase.requirePolicySources()) {
             assertThat(result.result()).containsKey("policySources");
         }
+        if (evalCase.requireClarification()) {
+            assertThat(result.result().get("needsClarification"))
+                    .as("case %s clarification", evalCase.id())
+                    .isEqualTo(true);
+        }
     }
 
-    private WorkflowDefinition workflowDefinition() {
+    private WorkflowDefinition workflowDefinition() throws Exception {
         RagProperties ragProperties = ragProperties();
         AdmissionIntentClassifier classifier = new AdmissionIntentClassifier(
                 new RagQueryRouter(ragProperties, new ConversationTurnResolver()),
                 ragProperties);
+        AdmissionOntologyRegistry ontologyRegistry = new AdmissionOntologyRegistry();
+        ontologyRegistry.load();
+        LocalAdmissionQueryCompiler localCompiler = new LocalAdmissionQueryCompiler(
+                classifier,
+                ontologyRegistry,
+                new ConversationTurnResolver(),
+                new AdmissionPriorSlotsBuilder(ontologyRegistry));
+        AdmissionQueryCompileService compileService = new AdmissionQueryCompileService(
+                AdmissionCompilerProperties.defaults(),
+                new IntentServiceClient(AdmissionCompilerProperties.defaults(), org.springframework.web.client.RestClient.builder()),
+                localCompiler,
+                new AdmissionPriorSlotsBuilder(ontologyRegistry));
         ObjectMapper objectMapper = new ObjectMapper();
         return new WorkflowDefinition(
                 "admission_report",
                 List.of(
-                        new IntentClassifyNode(classifier),
-                        new ScoreToolNode(admissionScoreToolClient),
+                        new CompileQueryNode(compileService),
+                        new ScoreToolNode(admissionScoreToolClient, objectMapper),
+                        new PreferenceRagNode(ragRetrievalServiceProvider),
                         new FilterScoreMajorsNode(ragProperties, objectMapper),
                         new PolicyRagNode(ragRetrievalServiceProvider, classifier, ragProperties),
                         new VerifyAnswerNode(),

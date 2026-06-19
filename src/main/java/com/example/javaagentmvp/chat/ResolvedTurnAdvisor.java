@@ -1,9 +1,14 @@
 package com.example.javaagentmvp.chat;
 
-import com.example.javaagentmvp.admissionworkflow.intent.ConversationTurnResolver;
+import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionQueryCompileService;
+import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionQueryContext;
+import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionQueryIr;
+import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionQueryIrBridge;
+import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionQueryPromptFormatter;
+import com.example.javaagentmvp.admissionworkflow.compiler.ClarificationSupport;
+import com.example.javaagentmvp.admissionworkflow.intent.AdmissionIntent;
 import com.example.javaagentmvp.admissionworkflow.intent.ResolvedTurn;
 import com.example.javaagentmvp.admissionworkflow.intent.ResolvedTurnContext;
-import com.example.javaagentmvp.admissionworkflow.intent.ResolvedTurnPromptFormatter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClientRequest;
@@ -11,9 +16,15 @@ import org.springframework.ai.chat.client.ChatClientResponse;
 import org.springframework.ai.chat.client.advisor.api.Advisor;
 import org.springframework.ai.chat.client.advisor.api.CallAdvisor;
 import org.springframework.ai.chat.client.advisor.api.CallAdvisorChain;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.model.Generation;
+
+import java.util.List;
 
 /**
- * Resolves multi-turn admission intent/slots and injects a structured task block into the system prompt.
+ * Compiles admission IR for the current turn, injects structured task context, and short-circuits
+ * when required slots are missing.
  */
 public class ResolvedTurnAdvisor implements CallAdvisor {
 
@@ -21,34 +32,86 @@ public class ResolvedTurnAdvisor implements CallAdvisor {
 
     static final int ORDER = Advisor.DEFAULT_CHAT_MEMORY_PRECEDENCE_ORDER + 50;
 
-    private final ConversationTurnResolver turnResolver;
+    private final AdmissionQueryCompileService admissionQueryCompileService;
 
-    public ResolvedTurnAdvisor(ConversationTurnResolver turnResolver) {
-        this.turnResolver = turnResolver;
+    public ResolvedTurnAdvisor(AdmissionQueryCompileService admissionQueryCompileService) {
+        this.admissionQueryCompileService = admissionQueryCompileService;
     }
 
     @Override
     public ChatClientResponse adviseCall(ChatClientRequest request, CallAdvisorChain chain) {
         UserTurnContextExtractor.UserTurnContext context = UserTurnContextExtractor.extract(request);
-        ResolvedTurn resolved = turnResolver.resolve(
+        AdmissionQueryIr query = admissionQueryCompileService.compile(
                 context.currentUserMessage(),
-                context.priorUserMessages(),
-                context.priorContextHints());
+                context.priorUserMessages());
+        AdmissionQueryContext.set(query);
+
+        AdmissionIntent intent = query.toIntent();
+        ResolvedTurn resolved = AdmissionQueryIrBridge.toResolvedTurn(
+                query,
+                !context.priorUserMessages().isEmpty()
+                        && (intent == AdmissionIntent.SCORE || intent == AdmissionIntent.RANK));
         ResolvedTurnContext.set(resolved);
 
-        if (!resolved.needsTaskPrompt()) {
-            log.debug("ResolvedTurn: intent={}, inherited={}", resolved.intent(), resolved.inheritedIntent());
+        if (query.blocksMcpExecution()) {
+            String clarification = ClarificationSupport.buildMessage(query.needsClarification());
+            log.info(
+                    "AdmissionQuery clarification: task={}, needs={}, message={}",
+                    query.task(),
+                    query.needsClarification(),
+                    clarification);
+            ChatTurnFlowLog.step(
+                    ChatTurnFlowLog.Step.ROUTE_DECISION,
+                    "clarification short-circuit intent=%s needs=%s",
+                    intent,
+                    query.needsClarification());
+            ChatTurnFlowLog.skipped(ChatTurnFlowLog.Step.TASK_PROMPT, "awaiting user clarification");
+            ChatTurnFlowLog.skipped(ChatTurnFlowLog.Step.RAG_RETRIEVE, "clarification short-circuit");
+            ChatTurnFlowLog.skipped(ChatTurnFlowLog.Step.MCP_PROCESS, "clarification short-circuit");
+            return clarificationResponse(clarification);
+        }
+
+        ChatTurnFlowLog.step(
+                ChatTurnFlowLog.Step.ROUTE_DECISION,
+                "continue intent=%s inherited=%s priorTurns=%d",
+                intent,
+                resolved.inheritedIntent(),
+                context.priorUserMessages().size());
+
+        if (!AdmissionQueryPromptFormatter.needsTaskPrompt(query)) {
+            log.debug("AdmissionQuery: task={}, no task prompt", query.task());
+            ChatTurnFlowLog.skipped(ChatTurnFlowLog.Step.TASK_PROMPT, "task=%s no structured prompt", query.task());
             return chain.nextCall(request);
         }
 
-        String taskBlock = ResolvedTurnPromptFormatter.format(resolved);
-        log.info("ResolvedTurn: intent={}, delta={}, inherited={}, tool={}",
-                resolved.intent(), resolved.delta(), resolved.inheritedIntent(), resolved.preferredMcpTool());
+        String taskBlock = AdmissionQueryPromptFormatter.format(query);
+        log.info(
+                "AdmissionQuery: task={}, provinces={}, preferences={}, filters={}",
+                query.task(),
+                query.slots().provincesOrEmpty(),
+                query.preferences().size(),
+                query.filters().excludeMajorKeywords().size() + query.filters().excludeSchoolNameContains().size());
+        ChatTurnFlowLog.step(
+                ChatTurnFlowLog.Step.TASK_PROMPT,
+                "task=%s provinces=%s preferences=%d excludeFilters=%d promptChars=%d",
+                query.task(),
+                query.slots().provincesOrEmpty(),
+                query.preferences().size(),
+                query.filters().excludeMajorKeywords().size() + query.filters().excludeSchoolNameContains().size(),
+                taskBlock.length());
 
         ChatClientRequest updated = request.mutate()
                 .prompt(request.prompt().augmentSystemMessage(taskBlock))
                 .build();
         return chain.nextCall(updated);
+    }
+
+    private static ChatClientResponse clarificationResponse(String message) {
+        return ChatClientResponse.builder()
+                .chatResponse(ChatResponse.builder()
+                        .generations(List.of(new Generation(new AssistantMessage(message))))
+                        .build())
+                .build();
     }
 
     @Override

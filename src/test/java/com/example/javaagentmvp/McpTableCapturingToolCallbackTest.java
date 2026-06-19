@@ -1,6 +1,10 @@
 package com.example.javaagentmvp;
 
 import com.example.javaagentmvp.chat.ui.ChatTable;
+import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionQueryContext;
+import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionFiltersIr;
+import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionQueryIr;
+import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionSlotsIr;
 import com.example.javaagentmvp.admissionworkflow.intent.AdmissionInputParser;
 import com.example.javaagentmvp.admissionworkflow.intent.AdmissionIntent;
 import com.example.javaagentmvp.admissionworkflow.intent.ResolvedTurn;
@@ -38,6 +42,8 @@ class McpTableCapturingToolCallbackTest {
     void tearDown() {
         McpTableContext.clear();
         McpRankContext.clear();
+        AdmissionQueryContext.clear();
+        ResolvedTurnContext.clear();
     }
 
     @Test
@@ -158,6 +164,299 @@ class McpTableCapturingToolCallbackTest {
         assertEquals("英语", tables.get(2).rows().get(0).get("major_name"));
     }
 
+    @Test
+    void getMajorByScoreFansOutAcrossCompiledProvinces() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        List<String> callProvinces = new ArrayList<>();
+        ToolCallback delegate = provinceTrackingDelegate(calls, callProvinces, Map.of(
+                "江苏", major("江苏专业", 625),
+                "浙江", major("浙江专业", 620)));
+
+        AdmissionQueryIr query = new AdmissionQueryIr(
+                "search_majors",
+                new AdmissionSlotsIr(630, List.of("江苏", "浙江"), "物理类", 2025, "普通批"),
+                AdmissionFiltersIr.empty(),
+                List.of(),
+                List.of(),
+                List.of(),
+                0.9,
+                "",
+                null);
+        AdmissionQueryContext.set(query);
+        try {
+            ToolCallback wrapped = McpTableCapturingToolCallback.wrap(delegate, extractor, objectMapper);
+            wrapped.call("{\"score\":630,\"province\":\"安徽\",\"year\":2025,\"subject_group\":\"物理类\"}");
+
+            assertEquals(2, calls.get());
+            assertEquals(List.of("江苏", "浙江"), callProvinces);
+            List<ChatTable> tables = McpTableContext.tables();
+            assertEquals(3, tables.size());
+            assertEquals(2, tables.get(1).rows().size());
+        }
+        finally {
+            AdmissionQueryContext.clear();
+        }
+    }
+
+    @Test
+    void getMajorByScoreAppliesCompiledExclusionFilters() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        ToolCallback delegate = tieredDelegate(calls, new AtomicReference<>(), List.of(
+                major("数学与应用数学（师范）", 620),
+                major("计算机科学与技术", 625)));
+
+        AdmissionQueryIr query = new AdmissionQueryIr(
+                "search_majors",
+                new AdmissionSlotsIr(630, List.of("安徽"), "物理类", 2025, "普通批"),
+                new AdmissionFiltersIr(List.of("师范"), List.of("师范"), List.of(), List.of()),
+                List.of(),
+                List.of(),
+                List.of(),
+                0.9,
+                "",
+                null);
+        AdmissionQueryContext.set(query);
+        try {
+            ToolCallback wrapped = McpTableCapturingToolCallback.wrap(delegate, extractor, objectMapper);
+            wrapped.call("{\"score\":630,\"province\":\"安徽\",\"year\":2025,\"subject_group\":\"物理类\"}");
+
+            assertEquals(1, calls.get());
+            List<ChatTable> tables = McpTableContext.tables();
+            assertEquals(3, tables.size());
+            assertEquals(1, tables.get(1).rows().size());
+            assertEquals("计算机科学与技术", tables.get(1).rows().get(0).get("major_name"));
+        }
+        finally {
+            AdmissionQueryContext.clear();
+        }
+    }
+
+    @Test
+    void getRankByScoreSkipsDuplicateProvinceAfterMultiFanOut() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        ToolCallback delegate = rankProvinceTrackingDelegate(calls, new ArrayList<>(), Map.of(
+                "江苏", rankRow("江苏", "历史类"),
+                "浙江", rankRow("浙江", "综合类"),
+                "上海", rankRow("上海", "综合类")));
+
+        AdmissionQueryIr query = new AdmissionQueryIr(
+                "search_rank",
+                new AdmissionSlotsIr(600, List.of("江苏", "浙江", "上海"), null, null, null),
+                AdmissionFiltersIr.empty(),
+                List.of(),
+                List.of(),
+                List.of(),
+                0.9,
+                "",
+                null);
+        AdmissionQueryContext.set(query);
+        try {
+            ToolCallback wrapped = McpTableCapturingToolCallback.wrap(delegate, extractor, objectMapper);
+            wrapped.call("{\"score\":600,\"province\":\"江苏\"}");
+            wrapped.call("{\"score\":600,\"province\":\"浙江\"}");
+            wrapped.call("{\"score\":600,\"province\":\"上海\"}");
+
+            assertEquals(3, calls.get());
+            assertEquals(3, McpRankContext.captures().size());
+            assertEquals(3, McpTableContext.tables().size());
+        }
+        finally {
+            AdmissionQueryContext.clear();
+        }
+    }
+
+    @Test
+    void getRankByScoreFansOutAcrossCompiledProvinces() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        ToolCallback delegate = rankProvinceTrackingDelegate(calls, new ArrayList<>(), Map.of(
+                "江苏", rankRow("江苏", "历史类"),
+                "浙江", rankRow("浙江", "综合类"),
+                "上海", rankRow("上海", "综合类")));
+
+        AdmissionQueryIr query = new AdmissionQueryIr(
+                "search_rank",
+                new AdmissionSlotsIr(600, List.of("江苏", "浙江", "上海"), null, null, null),
+                AdmissionFiltersIr.empty(),
+                List.of(),
+                List.of(),
+                List.of(),
+                0.9,
+                "",
+                null);
+        AdmissionQueryContext.set(query);
+        try {
+            ToolCallback wrapped = McpTableCapturingToolCallback.wrap(delegate, extractor, objectMapper);
+            wrapped.call("{\"score\":600,\"province\":\"江苏\"}");
+
+            assertEquals(3, calls.get());
+            assertEquals(3, McpRankContext.captures().size());
+            List<ChatTable> tables = McpTableContext.tables();
+            assertEquals(3, tables.size());
+            assertEquals("江苏", tables.get(0).title());
+            assertEquals("江苏", tables.get(0).province());
+            assertEquals("浙江", tables.get(1).title());
+            assertEquals("浙江", tables.get(1).province());
+            assertEquals("上海", tables.get(2).title());
+            assertEquals("上海", tables.get(2).province());
+        }
+        finally {
+            AdmissionQueryContext.clear();
+        }
+    }
+
+    @Test
+    void getRankByScoreFansOutAcrossCompiledProvincesWithInheritedSplitSubjectGroup() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        ToolCallback delegate = rankProvinceTrackingDelegate(calls, new ArrayList<>(), Map.of(
+                "江苏", rankRow("江苏", "物理类"),
+                "浙江", rankRow("浙江", "综合类"),
+                "上海", rankRow("上海", "综合类")));
+
+        AdmissionQueryIr query = new AdmissionQueryIr(
+                "search_rank",
+                new AdmissionSlotsIr(600, List.of("江苏", "浙江", "上海"), "物理类", null, null),
+                AdmissionFiltersIr.empty(),
+                List.of(),
+                List.of(),
+                List.of(),
+                0.9,
+                "",
+                null);
+        AdmissionQueryContext.set(query);
+        try {
+            ToolCallback wrapped = McpTableCapturingToolCallback.wrap(delegate, extractor, objectMapper);
+            wrapped.call("{\"score\":600,\"province\":\"江苏\",\"subject_group\":\"物理类\"}");
+
+            assertEquals(3, calls.get());
+            assertEquals(3, McpRankContext.captures().size());
+            List<ChatTable> tables = McpTableContext.tables();
+            assertEquals(3, tables.size());
+            assertEquals("江苏", tables.get(0).province());
+            assertEquals("浙江", tables.get(1).province());
+            assertEquals("上海", tables.get(2).province());
+        }
+        finally {
+            AdmissionQueryContext.clear();
+        }
+    }
+
+    private static Map<String, Object> rankRow(String province, String subjectGroup) {
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("province", province);
+        row.put("subject_group", subjectGroup);
+        return row;
+    }
+
+    private ToolCallback rankProvinceTrackingDelegate(
+            AtomicInteger calls,
+            List<String> callProvinces,
+            Map<String, Map<String, Object>> rankByProvince) {
+        return new ToolCallback() {
+            @Override
+            public ToolDefinition getToolDefinition() {
+                return ToolDefinition.builder()
+                        .name("opstream_agent_admission_score_getRankByScore")
+                        .description("test")
+                        .inputSchema("{}")
+                        .build();
+            }
+
+            @Override
+            public ToolMetadata getToolMetadata() {
+                return ToolMetadata.builder().build();
+            }
+
+            @Override
+            public String call(String toolInput) {
+                return call(toolInput, null);
+            }
+
+            @Override
+            public String call(String toolInput, ToolContext toolContext) {
+                try {
+                    calls.incrementAndGet();
+                    JsonNode input = objectMapper.readTree(toolInput);
+                    String province = input.path("province").asText();
+                    callProvinces.add(province);
+                    Map<String, Object> template = rankByProvince.get(province);
+                    if (template == null) {
+                        return objectMapper.writeValueAsString(Map.of("count", 0, "ranks", List.of()));
+                    }
+                    String requestedSubjectGroup = input.has("subject_group") && !input.get("subject_group").isNull()
+                            ? input.get("subject_group").asText("").strip()
+                            : "";
+                    String expectedSubjectGroup = String.valueOf(template.get("subject_group"));
+                    if (!requestedSubjectGroup.isBlank() && !expectedSubjectGroup.equals(requestedSubjectGroup)) {
+                        return objectMapper.writeValueAsString(Map.of("count", 0, "ranks", List.of()));
+                    }
+                    List<Map<String, Object>> ranks = List.of(
+                            Map.of(
+                                    "year", 2025,
+                                    "province", province,
+                                    "subject_group", template.get("subject_group"),
+                                    "score", 600,
+                                    "rank_min", 1000,
+                                    "rank_max", 1100,
+                                    "segment_count", 50,
+                                    "source_url", "https://example.com/" + province));
+                    return objectMapper.writeValueAsString(Map.of("count", ranks.size(), "ranks", ranks));
+                }
+                catch (Exception ex) {
+                    throw new IllegalStateException(ex);
+                }
+            }
+        };
+    }
+
+    private ToolCallback provinceTrackingDelegate(
+            AtomicInteger calls,
+            List<String> callProvinces,
+            Map<String, Map<String, Object>> majorsByProvince) {
+        return new ToolCallback() {
+            @Override
+            public ToolDefinition getToolDefinition() {
+                return ToolDefinition.builder()
+                        .name("opstream_agent_admission_score_getMajorByScore")
+                        .description("test")
+                        .inputSchema("{}")
+                        .build();
+            }
+
+            @Override
+            public ToolMetadata getToolMetadata() {
+                return ToolMetadata.builder().build();
+            }
+
+            @Override
+            public String call(String toolInput) {
+                return call(toolInput, null);
+            }
+
+            @Override
+            public String call(String toolInput, ToolContext toolContext) {
+                try {
+                    calls.incrementAndGet();
+                    JsonNode input = objectMapper.readTree(toolInput);
+                    String province = input.path("province").asText();
+                    callProvinces.add(province);
+                    int queryScore = input.get("score").intValue();
+                    Map<String, Object> major = majorsByProvince.get(province);
+                    List<Map<String, Object>> filtered = new ArrayList<>();
+                    if (major != null) {
+                        int minScore = Integer.parseInt(major.get("min_score").toString());
+                        if (minScore <= queryScore) {
+                            filtered.add(major);
+                        }
+                    }
+                    return objectMapper.writeValueAsString(Map.of("count", filtered.size(), "majors", filtered));
+                }
+                catch (Exception ex) {
+                    throw new IllegalStateException(ex);
+                }
+            }
+        };
+    }
+
     private ToolCallback tieredDelegate(
             AtomicInteger calls,
             AtomicReference<Integer> queryScoreUsed,
@@ -267,7 +566,7 @@ class McpTableCapturingToolCallbackTest {
         List<ChatTable> tables = McpTableContext.tables();
         assertEquals(1, tables.size());
         ChatTable rankTable = tables.get(0);
-        assertEquals("", rankTable.title());
+        assertEquals("安徽", rankTable.title());
         assertEquals(1, rankTable.rows().size());
         assertEquals("2025年 · 600分", rankTable.rows().get(0).get("year_label"));
         assertEquals("3,286–3,415", rankTable.rows().get(0).get("rank_range"));

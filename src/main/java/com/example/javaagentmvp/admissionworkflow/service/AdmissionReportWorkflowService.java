@@ -5,10 +5,11 @@ import com.example.javaagentmvp.admissionworkflow.async.WorkflowJobQueue;
 import com.example.javaagentmvp.admissionworkflow.engine.WorkflowDefinition;
 import com.example.javaagentmvp.admissionworkflow.engine.WorkflowEngine;
 import com.example.javaagentmvp.admissionworkflow.engine.WorkflowExecutionResult;
+import com.example.javaagentmvp.admissionworkflow.nodes.CompileQueryNode;
 import com.example.javaagentmvp.admissionworkflow.nodes.FilterScoreMajorsNode;
 import com.example.javaagentmvp.admissionworkflow.nodes.FormatResponseNode;
-import com.example.javaagentmvp.admissionworkflow.nodes.IntentClassifyNode;
 import com.example.javaagentmvp.admissionworkflow.nodes.PolicyRagNode;
+import com.example.javaagentmvp.admissionworkflow.nodes.PreferenceRagNode;
 import com.example.javaagentmvp.admissionworkflow.nodes.ScoreToolNode;
 import com.example.javaagentmvp.admissionworkflow.nodes.SynthesizeReportNode;
 import com.example.javaagentmvp.admissionworkflow.nodes.VerifyAnswerNode;
@@ -41,9 +42,10 @@ public class AdmissionReportWorkflowService {
             AdmissionWorkflowProperties properties,
             WorkflowRunRepository workflowRunRepository,
             ObjectMapper objectMapper,
-            IntentClassifyNode intentClassifyNode,
+            CompileQueryNode compileQueryNode,
             ScoreToolNode scoreToolNode,
             FilterScoreMajorsNode filterScoreMajorsNode,
+            PreferenceRagNode preferenceRagNode,
             PolicyRagNode policyRagNode,
             VerifyAnswerNode verifyAnswerNode,
             FormatResponseNode formatResponseNode,
@@ -58,8 +60,9 @@ public class AdmissionReportWorkflowService {
         this.admissionReportDefinition = new WorkflowDefinition(
                 properties.defaultWorkflowType(),
                 List.of(
-                        intentClassifyNode,
+                        compileQueryNode,
                         scoreToolNode,
+                        preferenceRagNode,
                         filterScoreMajorsNode,
                         policyRagNode,
                         verifyAnswerNode,

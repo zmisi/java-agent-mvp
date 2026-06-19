@@ -79,6 +79,7 @@ public class McpTableExtractor {
         int queryScore = score != null
                 ? score
                 : ranks.get(0).path("score").asInt(0);
+        String tableProvince = resolveTableProvince(province, ranks);
         List<Map<String, String>> rows = new ArrayList<>();
         for (JsonNode rank : RankResponseFormatter.sortedRankRows(ranks)) {
             Map<String, String> row = new LinkedHashMap<>();
@@ -91,9 +92,26 @@ public class McpTableExtractor {
             if (!sourceUrl.isBlank()) {
                 row.put("source_url", sourceUrl);
             }
+            if (!tableProvince.isBlank()) {
+                row.put("province", tableProvince);
+            }
             rows.add(row);
         }
-        return Optional.of(new ChatTable("", RANK_BY_SCORE_COLUMNS, rows));
+        String title = tableProvince.isBlank() ? "" : tableProvince;
+        return Optional.of(new ChatTable(title, RANK_BY_SCORE_COLUMNS, rows, tableProvince.isBlank() ? null : tableProvince));
+    }
+
+    private static String resolveTableProvince(String province, JsonNode ranks) {
+        if (province != null && !province.isBlank()) {
+            return province.strip();
+        }
+        if (ranks != null && ranks.isArray() && !ranks.isEmpty()) {
+            String fromRow = ranks.get(0).path("province").asText("").strip();
+            if (!fromRow.isBlank()) {
+                return fromRow;
+            }
+        }
+        return "";
     }
 
     public String unwrapToolPayload(String responseData) {

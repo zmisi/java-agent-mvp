@@ -57,5 +57,21 @@ def test_followup_merge_provinces():
     )
     q = result.query
     assert q.slots.score == 620
-    assert "浙江" in q.slots.provinces
-    assert "安徽" in q.slots.provinces
+    assert q.slots.provinces == ["浙江"]
+
+
+def test_followup_northeast_rank_replaces_prior_provinces():
+    compiler = AdmissionQueryCompiler()
+    result = compiler.compile(
+        CompileRequest(
+            message="在东北的排名",
+            prior_user_messages=["600分在长三角排名"],
+            prior_slots=Slots(score=600, provinces=["江苏", "浙江", "上海"]),
+            use_llm=False,
+        )
+    )
+    q = result.query
+    assert q.task == Task.SEARCH_RANK
+    assert q.slots.score == 600
+    assert set(q.slots.provinces) == {"辽宁", "吉林", "黑龙江"}
+    assert "江苏" not in q.slots.provinces

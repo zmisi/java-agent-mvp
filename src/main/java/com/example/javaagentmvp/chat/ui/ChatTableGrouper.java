@@ -52,7 +52,7 @@ public final class ChatTableGrouper {
         if (isRankTable(table)) {
             return table;
         }
-        return new ChatTable(table.title(), table.columns(), table.rows(), groupMajorRows(table.rows()));
+        return new ChatTable(table.title(), table.columns(), table.rows(), groupMajorRows(table.rows()), table.province());
     }
 
     private static boolean isRankTable(ChatTable table) {

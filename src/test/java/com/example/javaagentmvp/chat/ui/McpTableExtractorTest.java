@@ -164,6 +164,36 @@ class McpTableExtractorTest {
     }
 
     @Test
+    void extractRankByScoreUsesProvinceAsTableTitle() throws Exception {
+        String responseData = """
+                {
+                  "count": 1,
+                  "ranks": [
+                    {
+                      "province": "江苏",
+                      "year": 2025,
+                      "subject_group": "物理类",
+                      "score": 600,
+                      "rank_min": 33986,
+                      "rank_max": 34888,
+                      "segment_count": 903,
+                      "source_url": "https://example.com"
+                    }
+                  ]
+                }
+                """;
+
+        ChatTable table = extractor.extractRankByScore(
+                new ObjectMapper().readTree(responseData),
+                600,
+                "江苏").orElseThrow();
+
+        assertEquals("江苏", table.title());
+        assertEquals("江苏", table.province());
+        assertEquals("物理类", table.rows().get(0).get("subject_group"));
+    }
+
+    @Test
     void extractReturnsEmptyForUnknownTool() {
         assertTrue(extractor.extract("unknownTool", "{}", "{}").isEmpty());
     }

@@ -5,11 +5,14 @@ from __future__ import annotations
 from admission_compiler.ir import Filters, Slots
 
 
-def merge_slots(prior: Slots | None, current: Slots) -> Slots:
+def merge_slots(prior: Slots | None, current: Slots, *, geography_overridden: bool = False) -> Slots:
     if prior is None:
         return current
 
-    provinces = _merge_list(prior.provinces, current.provinces)
+    if geography_overridden:
+        provinces = list(current.provinces)
+    else:
+        provinces = _merge_list(prior.provinces, current.provinces)
     return Slots(
         score=current.score if current.score is not None else prior.score,
         provinces=provinces,

@@ -2,6 +2,7 @@ package com.example.javaagentmvp.admissionworkflow.tool;
 
 import com.example.javaagentmvp.observability.AgentMetrics;
 import com.example.javaagentmvp.observability.TraceResponseFilter;
+import com.example.javaagentmvp.admissionworkflow.format.RankSubjectGroupResolver;
 import com.example.javaagentmvp.chat.ui.McpTableExtractor;
 import com.example.javaagentmvp.dbagent.DbAgentTargetRegistry;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -58,8 +59,9 @@ public class AdmissionScoreToolClient {
         if (province != null && !province.isBlank()) {
             args.put("province", province);
         }
-        if (subjectGroup != null && !subjectGroup.isBlank()) {
-            args.put("subject_group", subjectGroup);
+        String rankSubjectGroup = RankSubjectGroupResolver.rankSubjectGroupForProvince(province, subjectGroup);
+        if (rankSubjectGroup != null) {
+            args.put("subject_group", rankSubjectGroup);
         }
         if (year != null) {
             args.put("year", year);

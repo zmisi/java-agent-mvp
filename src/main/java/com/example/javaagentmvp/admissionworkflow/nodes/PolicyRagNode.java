@@ -43,6 +43,10 @@ public class PolicyRagNode implements WorkflowNode {
 
     @Override
     public WorkflowNodeResult execute(WorkflowContext context) {
+        if (context.get(CompileQueryNode.KEY_CLARIFICATION_MESSAGE, String.class) != null) {
+            return WorkflowNodeResult.skipped("awaiting clarification");
+        }
+
         AdmissionIntent intent = context.get(IntentClassifyNode.KEY_INTENT, AdmissionIntent.class);
         if (intent == AdmissionIntent.SCORE && !intentClassifier.hasPolicyKeywords(context.inputMessage())) {
             return WorkflowNodeResult.skipped("score-only intent");

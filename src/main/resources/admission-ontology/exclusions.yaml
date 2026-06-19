@@ -1,0 +1,16 @@
+exclusions:
+  不当老师:
+    exclude_school_name_contains: [师范]
+    exclude_major_keywords: [师范, 教育学, 学前教育, 小学教育]
+  不要当老师:
+    exclude_school_name_contains: [师范]
+    exclude_major_keywords: [师范, 教育学, 学前教育, 小学教育]
+  不要师范:
+    exclude_school_name_contains: [师范]
+    exclude_major_keywords: [师范]
+  不想当老师:
+    exclude_school_name_contains: [师范]
+    exclude_major_keywords: [师范, 教育学]
+  排除师范:
+    exclude_school_name_contains: [师范]
+    exclude_major_keywords: [师范]

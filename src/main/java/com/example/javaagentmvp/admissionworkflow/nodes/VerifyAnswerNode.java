@@ -3,6 +3,7 @@ package com.example.javaagentmvp.admissionworkflow.nodes;
 import com.example.javaagentmvp.admissionworkflow.engine.WorkflowContext;
 import com.example.javaagentmvp.admissionworkflow.engine.WorkflowNode;
 import com.example.javaagentmvp.admissionworkflow.engine.WorkflowNodeResult;
+import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionQueryIr;
 import com.example.javaagentmvp.admissionworkflow.intent.AdmissionIntent;
 import com.example.javaagentmvp.admissionworkflow.intent.AdmissionQueryHints;
 import com.example.javaagentmvp.rag.RagSource;
@@ -26,6 +27,19 @@ public class VerifyAnswerNode implements WorkflowNode {
 
     @Override
     public WorkflowNodeResult execute(WorkflowContext context) {
+        String clarification = context.get(CompileQueryNode.KEY_CLARIFICATION_MESSAGE, String.class);
+        if (clarification != null && !clarification.isBlank()) {
+            Map<String, Object> verification = Map.of(
+                    "valid", true,
+                    "issues", List.of(),
+                    "followUpFields", context.get(CompileQueryNode.KEY_ADMISSION_QUERY, AdmissionQueryIr.class) == null
+                            ? List.of()
+                            : context.get(CompileQueryNode.KEY_ADMISSION_QUERY, AdmissionQueryIr.class).needsClarification(),
+                    "clarification", true);
+            context.put(KEY_VERIFICATION, verification);
+            return WorkflowNodeResult.succeeded(verification);
+        }
+
         AdmissionIntent intent = context.get(IntentClassifyNode.KEY_INTENT, AdmissionIntent.class);
         JsonNode scoreResult = effectiveScoreResult(context);
         @SuppressWarnings("unchecked")

@@ -1,0 +1,15 @@
+regions:
+  长三角:
+    provinces: [江苏, 浙江, 上海]
+  长三角地区:
+    provinces: [江苏, 浙江, 上海]
+  江浙沪:
+    provinces: [江苏, 浙江, 上海]
+  江浙:
+    provinces: [江苏, 浙江]
+  华东:
+    provinces: [上海, 江苏, 浙江, 安徽, 福建, 江西, 山东]
+  东北:
+    provinces: [辽宁, 吉林, 黑龙江]
+  东北地区:
+    provinces: [辽宁, 吉林, 黑龙江]

@@ -46,6 +46,7 @@ public final class EvalCaseLoader {
                     readStringList(node, "expectNodesExecuted"),
                     node.path("requireScoreResult").asBoolean(false),
                     node.path("requirePolicySources").asBoolean(false),
+                    node.path("requireClarification").asBoolean(false),
                     node.path("maxLatencyMs").asLong(60_000)));
         }
         return cases;
@@ -84,6 +85,7 @@ public final class EvalCaseLoader {
             List<String> expectNodesExecuted,
             boolean requireScoreResult,
             boolean requirePolicySources,
+            boolean requireClarification,
             long maxLatencyMs) {
     }
 }

@@ -44,7 +44,7 @@ Workflow case:
   "input": "安徽物理类620分，合工大计算机和软件工程政策",
   "expectIntent": "REPORT",
   "expectStatus": "SUCCEEDED",
-  "expectNodesExecuted": ["intent_classify", "score_tool", "policy_rag"],
+  "expectNodesExecuted": ["compile_query", "score_tool", "policy_rag"],
   "requireScoreResult": true,
   "requirePolicySources": true,
   "maxLatencyMs": 60000

@@ -68,8 +68,21 @@ export COMPILER_LLM_MODEL=qwen-plus
 
 默认 **关闭** LLM，规则+本体即可通过 eval。
 
-## 与 Java 集成（下一步）
+## 与 Java 集成
 
-Java 侧 `POST http://intent-service:8090/compile`，将返回的 IR 交给 Planner / `FilterScoreMajorsNode` 扩展执行。
+Java Workflow 通过 `IntentServiceClient` 调用 `POST /compile`：
 
-Schema：`schema/admission_query.schema.json`
+```yaml
+app:
+  admission-compiler:
+    enabled: true          # false 时使用 Java 本地 compiler（classpath ontology）
+    base-url: http://localhost:8090
+    fallback-to-local: true
+```
+
+Docker Compose 已包含 `admission-compiler` 服务，并自动配置 `app` 连接。
+
+Workflow 节点顺序：
+
+`compile_query` → `score_tool` → `preference_rag` → `filter_score_majors` → `policy_rag` → …
+

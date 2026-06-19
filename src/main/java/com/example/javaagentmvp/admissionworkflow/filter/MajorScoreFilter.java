@@ -34,6 +34,15 @@ public final class MajorScoreFilter {
             int userScore,
             AdmissionQueryHints.Hints hints,
             ObjectMapper objectMapper) {
+        return filter(rawScoreResult, userScore, hints, null, objectMapper);
+    }
+
+    public static FilterResult filter(
+            JsonNode rawScoreResult,
+            int userScore,
+            AdmissionQueryHints.Hints hints,
+            QueryConstraints constraints,
+            ObjectMapper objectMapper) {
         JsonNode majorsNode = rawScoreResult == null ? null : rawScoreResult.get("majors");
         int totalCount = rawScoreResult == null
                 ? 0
@@ -46,7 +55,9 @@ public final class MajorScoreFilter {
 
         List<JsonNode> filtered = new ArrayList<>();
         for (JsonNode major : allMajors) {
-            if (matchesSchool(major, hints) && matchesMajor(major, hints)) {
+            if (matchesSchool(major, hints)
+                    && matchesMajor(major, hints)
+                    && matchesConstraints(major, constraints)) {
                 filtered.add(major);
             }
         }
@@ -73,13 +84,22 @@ public final class MajorScoreFilter {
         if (!hints.majorKeywords().isEmpty()) {
             payload.putPOJO("majorKeywords", hints.majorKeywords());
         }
+        if (constraints != null) {
+            if (constraints.hasProvinceFilter()) {
+                payload.putPOJO("provinces", constraints.provinces());
+            }
+            if (constraints.hasExclusions()) {
+                payload.putPOJO("excludeSchoolNameContains", constraints.excludeSchoolNameContains());
+                payload.putPOJO("excludeMajorKeywords", constraints.excludeMajorKeywords());
+            }
+        }
 
         return new FilterResult(
                 payload,
                 filtered.size(),
                 totalCount,
                 hints.schoolSpecified(),
-                hints.majorSpecified(),
+                hints.majorSpecified() || (constraints != null && !constraints.includeMajorKeywords().isEmpty()),
                 tierCounts);
     }
 
@@ -106,16 +126,61 @@ public final class MajorScoreFilter {
     }
 
     private static boolean matchesMajor(JsonNode major, AdmissionQueryHints.Hints hints) {
-        if (!hints.majorSpecified()) {
+        List<String> keywords = hints.majorKeywords();
+        if (hints.majorSpecified()) {
+            String majorName = text(major.get("major_name"));
+            for (String keyword : keywords) {
+                if (majorName.contains(keyword)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        return true;
+    }
+
+    private static boolean matchesConstraints(JsonNode major, QueryConstraints constraints) {
+        if (constraints == null) {
             return true;
         }
+        String universityName = text(major.get("university_name"));
         String majorName = text(major.get("major_name"));
-        for (String keyword : hints.majorKeywords()) {
-            if (majorName.contains(keyword)) {
-                return true;
+        String queryProvince = text(major.get("query_province"));
+
+        if (constraints.hasProvinceFilter()) {
+            boolean provinceMatched = constraints.provinces().stream().anyMatch(province ->
+                    province.equals(queryProvince)
+                            || universityName.contains(province)
+                            || text(major.get("province")).contains(province));
+            if (!provinceMatched) {
+                return false;
             }
         }
-        return false;
+
+        for (String token : constraints.excludeSchoolNameContains()) {
+            if (!token.isBlank() && universityName.contains(token)) {
+                return false;
+            }
+        }
+        for (String token : constraints.excludeMajorKeywords()) {
+            if (!token.isBlank() && majorName.contains(token)) {
+                return false;
+            }
+        }
+
+        if (!constraints.includeMajorKeywords().isEmpty()) {
+            boolean includeMatched = false;
+            for (String keyword : constraints.includeMajorKeywords()) {
+                if (majorName.contains(keyword)) {
+                    includeMatched = true;
+                    break;
+                }
+            }
+            if (!includeMatched) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static Map<String, List<JsonNode>> classifyTiers(List<JsonNode> majors, int userScore) {

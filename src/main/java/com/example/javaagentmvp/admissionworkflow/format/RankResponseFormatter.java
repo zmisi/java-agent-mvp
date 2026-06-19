@@ -26,16 +26,82 @@ public final class RankResponseFormatter {
 
         int queryScore = resolveScore(score, ranks);
         String queryProvince = resolveProvince(province, ranks);
-        if (queryProvince != null && !queryProvince.isBlank()) {
+        return formatIntroText(queryScore, queryProvince == null || queryProvince.isBlank()
+                ? List.of()
+                : List.of(queryProvince));
+    }
+
+    public static String formatIntroForProvinces(Integer score, List<String> provinces) {
+        if (score == null) {
+            return "未能查询到该分数对应的位次，请补充省份、科类或年份。";
+        }
+        List<String> normalized = provinces == null
+                ? List.of()
+                : provinces.stream()
+                        .filter(p -> p != null && !p.isBlank())
+                        .map(String::strip)
+                        .distinct()
+                        .toList();
+        return formatIntroText(score, normalized);
+    }
+
+    public static String formatNoRankDataMessage(
+            Integer score,
+            List<String> regionPhrases,
+            List<String> provinces) {
+        String target = formatGeographyLabel(regionPhrases, provinces);
+        if (target.isBlank()) {
+            return "暂未导入相关省份的一分一段表数据，无法查询对应位次。";
+        }
+        if (score != null) {
+            return String.format(
+                    Locale.ROOT,
+                    "暂未导入%s的一分一段表数据，无法查询%d分对应位次。",
+                    target,
+                    score);
+        }
+        return String.format(
+                Locale.ROOT,
+                "暂未导入%s的一分一段表数据，无法查询对应位次。",
+                target);
+    }
+
+    private static String formatGeographyLabel(List<String> regionPhrases, List<String> provinces) {
+        if (regionPhrases != null && !regionPhrases.isEmpty()) {
+            return String.join("、", regionPhrases.stream()
+                    .filter(phrase -> phrase != null && !phrase.isBlank())
+                    .map(String::strip)
+                    .distinct()
+                    .toList());
+        }
+        if (provinces != null && !provinces.isEmpty()) {
+            return String.join("、", provinces.stream()
+                    .filter(province -> province != null && !province.isBlank())
+                    .map(String::strip)
+                    .distinct()
+                    .toList());
+        }
+        return "";
+    }
+
+    private static String formatIntroText(int queryScore, List<String> provinces) {
+        if (provinces.isEmpty()) {
+            return String.format(
+                    Locale.ROOT,
+                    "根据已导入的省级一分一段表，%d分 对应位次如下（均为官方公布数据）：",
+                    queryScore);
+        }
+        if (provinces.size() == 1) {
             return String.format(
                     Locale.ROOT,
                     "根据已导入的省级一分一段表，%s %d分 对应位次如下（均为官方公布数据）：",
-                    queryProvince,
+                    provinces.get(0),
                     queryScore);
         }
         return String.format(
                 Locale.ROOT,
-                "根据已导入的省级一分一段表，%d分 对应位次如下（均为官方公布数据）：",
+                "根据已导入的省级一分一段表，%s %d分 对应位次如下（均为官方公布数据）：",
+                String.join("、", provinces),
                 queryScore);
     }
 
@@ -66,6 +132,12 @@ public final class RankResponseFormatter {
                     queryScore));
         }
 
+        out.append("<section class=\"rank-table-block\">");
+        if (queryProvince != null && !queryProvince.isBlank()) {
+            out.append("<div class=\"rank-table-header\">")
+                    .append(escapeHtml(queryProvince))
+                    .append("</div>");
+        }
         out.append("<div class=\"rank-result-wrap\"><table class=\"rank-result-table\">");
         out.append("<thead><tr>");
         appendHeaderCell(out, "年份");
@@ -85,7 +157,7 @@ public final class RankResponseFormatter {
             out.append("</tr>");
         }
 
-        out.append("</tbody></table></div>");
+        out.append("</tbody></table></div></section>");
         return out.toString().strip();
     }
 

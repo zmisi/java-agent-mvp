@@ -170,7 +170,17 @@ public class ChatController {
             String assistant,
             List<RagSource> sources,
             List<ChatTable> tables,
-            ContextUsageResponse contextUsage) {
+            ContextUsageResponse contextUsage,
+            String admissionTask,
+            List<String> needsClarification) {
+
+        public ChatReplyDto(
+                String assistant,
+                List<RagSource> sources,
+                List<ChatTable> tables,
+                ContextUsageResponse contextUsage) {
+            this(assistant, sources, tables, contextUsage, null, null);
+        }
     }
 
     public record CompactReplyDto(

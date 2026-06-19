@@ -16,6 +16,11 @@ app:
       queue-key: admission-workflow:jobs
       consumer-enabled: true
       brpop-timeout-seconds: 5
+  admission-compiler:
+    enabled: ${APP_ADMISSION_COMPILER_ENABLED:true}
+    base-url: ${APP_ADMISSION_COMPILER_BASE_URL:http://admission-compiler:8090}
+    timeout-ms: 3000
+    fallback-to-local: true
   db-agent:
     chat-target: chat-readonly
     targets:

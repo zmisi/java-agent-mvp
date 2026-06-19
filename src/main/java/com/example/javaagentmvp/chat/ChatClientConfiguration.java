@@ -6,15 +6,14 @@ import com.example.javaagentmvp.McpTableCapturingToolCallback;
 import com.example.javaagentmvp.QwenApiLoggingAdvisor;
 import com.example.javaagentmvp.dbagent.DbAgentTargetRegistry;
 import com.example.javaagentmvp.chat.ui.McpTableExtractor;
+import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionQueryCompileService;
 import com.example.javaagentmvp.rag.AdmissionsAnswerFormatAdvisor;
 import com.example.javaagentmvp.rag.ConditionalQuestionAnswerAdvisor;
-import com.example.javaagentmvp.admissionworkflow.intent.ConversationTurnResolver;
 import com.example.javaagentmvp.rag.RagFlowLoggingAdvisor;
 import com.example.javaagentmvp.rag.RagFlowStartAdvisor;
 import com.example.javaagentmvp.rag.RagProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.mcp.SyncMcpToolCallbackProvider;
 import org.springframework.ai.tool.ToolCallback;
@@ -64,15 +63,14 @@ public class ChatClientConfiguration {
     }
 
     @Bean
-    ResolvedTurnAdvisor resolvedTurnAdvisor(ConversationTurnResolver conversationTurnResolver) {
-        return new ResolvedTurnAdvisor(conversationTurnResolver);
+    ResolvedTurnAdvisor resolvedTurnAdvisor(AdmissionQueryCompileService admissionQueryCompileService) {
+        return new ResolvedTurnAdvisor(admissionQueryCompileService);
     }
 
     @Bean
     ChatClient chatClient(
             ChatClient.Builder chatClientBuilder,
             DbAgentTargetRegistry dbAgentTargetRegistry,
-            ChatMemory chatMemory,
             QwenApiLoggingAdvisor qwenApiLoggingAdvisor,
             AgentSystemPrompt agentSystemPrompt,
             RagProperties ragProperties,
@@ -94,7 +92,6 @@ public class ChatClientConfiguration {
                 .defaultSystem(buildSystemPrompt(agentSystemPrompt, ragProperties))
                 .defaultToolCallbacks(toolCallbacks)
                 .defaultAdvisors(
-                        MessageChatMemoryAdvisor.builder(chatMemory).build(),
                         qwenApiLoggingAdvisor,
                         chatContextUsageAdvisor,
                         resolvedTurnAdvisor);

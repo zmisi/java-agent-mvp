@@ -3,6 +3,8 @@ package com.example.javaagentmvp.admissionworkflow.nodes;
 import com.example.javaagentmvp.admissionworkflow.engine.WorkflowContext;
 import com.example.javaagentmvp.admissionworkflow.engine.WorkflowNode;
 import com.example.javaagentmvp.admissionworkflow.engine.WorkflowNodeResult;
+import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionQueryIr;
+import com.example.javaagentmvp.admissionworkflow.filter.QueryConstraints;
 import com.example.javaagentmvp.admissionworkflow.intent.AdmissionIntent;
 import com.example.javaagentmvp.admissionworkflow.intent.AdmissionQueryHints;
 import com.example.javaagentmvp.rag.RagSource;
@@ -27,6 +29,21 @@ public class FormatResponseNode implements WorkflowNode {
 
     @Override
     public WorkflowNodeResult execute(WorkflowContext context) {
+        String clarification = context.get(CompileQueryNode.KEY_CLARIFICATION_MESSAGE, String.class);
+        if (clarification != null && !clarification.isBlank()) {
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("intent", AdmissionIntent.SCORE.name());
+            result.put("summary", clarification);
+            result.put("needsClarification", true);
+            AdmissionQueryIr query = context.get(CompileQueryNode.KEY_ADMISSION_QUERY, AdmissionQueryIr.class);
+            if (query != null) {
+                result.put("admissionQuery", query);
+                result.put("clarificationFields", query.needsClarification());
+            }
+            context.put(KEY_FINAL_RESULT, result);
+            return WorkflowNodeResult.succeeded(Map.of("summary", clarification, "needsClarification", true));
+        }
+
         AdmissionIntent intent = context.get(IntentClassifyNode.KEY_INTENT, AdmissionIntent.class);
         JsonNode rawScoreResult = context.get(ScoreToolNode.KEY_SCORE_RESULT, JsonNode.class);
         JsonNode scoreResult = context.get(FilterScoreMajorsNode.KEY_FILTERED_SCORE_RESULT, JsonNode.class);
@@ -62,6 +79,15 @@ public class FormatResponseNode implements WorkflowNode {
         }
         if (hints != null && !hints.majorKeywords().isEmpty()) {
             result.put("majorKeywords", hints.majorKeywords());
+        }
+        @SuppressWarnings("unchecked")
+        List<RagSource> preferenceSources = (List<RagSource>) context.get(PreferenceRagNode.KEY_PREFERENCE_SOURCES);
+        if (preferenceSources != null && !preferenceSources.isEmpty()) {
+            result.put("preferenceSources", preferenceSources);
+        }
+        QueryConstraints constraints = context.get(FilterScoreMajorsNode.KEY_QUERY_CONSTRAINTS, QueryConstraints.class);
+        if (constraints != null && constraints.hasPreferenceRanking()) {
+            result.put("preferenceRanked", true);
         }
 
         context.put(KEY_FINAL_RESULT, result);

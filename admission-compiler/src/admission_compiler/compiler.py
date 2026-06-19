@@ -50,7 +50,11 @@ class AdmissionQueryCompiler:
             year=rule.year,
             admission_type=rule.admission_type,
         )
-        slots = merge_slots(request.prior_slots, slots)
+        slots = merge_slots(
+            request.prior_slots,
+            slots,
+            geography_overridden=bool(regions or explicit_provinces),
+        )
 
         filters = Filters(
             exclude_school_name_contains=list(exclusion_filters.exclude_school_name_contains),

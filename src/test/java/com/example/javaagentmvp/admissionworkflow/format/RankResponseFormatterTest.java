@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.List;
+
 class RankResponseFormatterTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -69,6 +71,8 @@ class RankResponseFormatterTest {
 
         assertThat(html).contains("600分");
         assertThat(html).contains("rank-result-table");
+        assertThat(html).contains("rank-table-header");
+        assertThat(html).contains("安徽");
         assertThat(html).contains("<th scope=\"col\">年份</th>");
         assertThat(html).contains("2025年 · 600分");
         assertThat(html).contains("3,286–3,415");
@@ -79,6 +83,24 @@ class RankResponseFormatterTest {
         assertThat(html).contains("rank-source-link");
         assertThat(html).contains("✅");
         assertThat(html).doesNotContain("预估");
+    }
+
+    @Test
+    void formatIntroForMultipleProvinces() {
+        String intro = RankResponseFormatter.formatIntroForProvinces(600, List.of("江苏", "浙江", "上海"));
+        assertThat(intro).contains("江苏、浙江、上海");
+        assertThat(intro).contains("600分");
+    }
+
+    @Test
+    void formatNoRankDataMessageForRegion() {
+        String message = RankResponseFormatter.formatNoRankDataMessage(
+                600,
+                List.of("东北"),
+                List.of("辽宁", "吉林", "黑龙江"));
+        assertThat(message).contains("东北");
+        assertThat(message).contains("600分");
+        assertThat(message).contains("暂未导入");
     }
 
     @Test

@@ -4,6 +4,7 @@
 {"id":"rank-anhui-620","input":"安徽物理类620分排名多少","expect":{"task":"search_rank","score":620,"provinces":["安徽"],"subject_group":"物理类"}}
 {"id":"policy-charter","input":"合工大2025年招生章程录取规则是什么","expect":{"task":"policy_qa"}}
 {"id":"report-mixed","input":"安徽物理类620分，合工大计算机和软件工程政策","expect":{"task":"report","score":620,"provinces":["安徽"]}}
-{"id":"followup-province","input":"那浙江呢？","prior_user_messages":["安徽物理类620分能上什么专业"],"prior_slots":{"score":620,"provinces":["安徽"],"subject_group":"物理类"},"expect":{"task":"search_majors","score":620,"provinces":["安徽","浙江"],"subject_group":"物理类"}}
+{"id":"followup-province","input":"那浙江呢？","prior_user_messages":["安徽物理类620分能上什么专业"],"prior_slots":{"score":620,"provinces":["安徽"],"subject_group":"物理类"},"expect":{"task":"search_majors","score":620,"provinces":["浙江"],"subject_group":"物理类"}}
 {"id":"exclude-normal-school","input":"600分江苏物理类，不要师范","expect":{"task":"search_majors","score":600,"provinces":["江苏"],"exclude_school":["师范"]}}
 {"id":"greeting","input":"你好","expect":{"task":"unknown"}}
+{"id":"greeting","input":"ed89a900c844700e7801d842d71b3ab1a78043543178d33ba536e385f237ca49","expect":{"task":"unknown"}}

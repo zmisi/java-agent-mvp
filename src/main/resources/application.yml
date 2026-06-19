@@ -153,6 +153,11 @@ app:
       queue-key: admission-workflow:jobs
       consumer-enabled: true
       brpop-timeout-seconds: 5
+  admission-compiler:
+    enabled: false
+    base-url: http://localhost:8090
+    timeout-ms: 3000
+    fallback-to-local: true
 
 logging:
   level:
@@ -165,6 +170,10 @@ logging:
     com.example.javaagentmvp.rag.RagRetrievalService: INFO
     com.example.javaagentmvp.admissionworkflow.tool.AdmissionScoreToolClient: INFO
     com.example.javaagentmvp.admissionworkflow.engine.WorkflowEngine: INFO
+    com.example.javaagentmvp.chat.ChatTurnFlowLog: INFO
+    com.example.javaagentmvp.chat.ResolvedTurnAdvisor: INFO
+    com.example.javaagentmvp.admissionworkflow.compiler.AdmissionQueryCompileService: INFO
+    com.example.javaagentmvp.McpTableCapturingToolCallback: INFO
     com.example.javaagentmvp.QwenApiLoggingAdvisor: INFO
     com.alibaba.cloud.ai.dashscope: DEBUG
     com.alibaba.cloud.ai.dashscope.api: DEBUG

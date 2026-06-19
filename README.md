@@ -240,7 +240,7 @@ app.admission-workflow.async:
 
 `docker compose up` 会启动 `redis:7`；app 依赖 Redis healthcheck。
 
-节点链：`intent_classify → score_tool → filter_score_majors → policy_rag → verify_answer → format_response → synthesize_report`
+节点链：`compile_query → score_tool → preference_rag → filter_score_majors → policy_rag → verify_answer → format_response → synthesize_report`
 
 `score_tool` 与 Chat MCP 一致：用 **用户分 + 15** 调用 `getMajorByScore`（MCP 返回 `min_score <= 查询分`），再在 `filter_score_majors` 按用户真实分划分冲（+15 内）/ 稳（至用户分）/ 保（-15 及以下）。
 

@@ -1096,6 +1096,22 @@ function formatRankSourceCell(row) {
   return `<span class="rank-source"><span class="rank-source-icon" aria-hidden="true">✅</span>${formatTableCell(row.source_label || "官方已公布")}</span>`;
 }
 
+function rankTableProvinceLabel(table) {
+  const explicit = String(table.province || table.title || "").trim();
+  if (explicit) {
+    const legacy = explicit.match(/^(.+?)\s*·/);
+    return legacy ? legacy[1].trim() : explicit;
+  }
+  const rows = table.rows || [];
+  for (const row of rows) {
+    const fromRow = String(row.province || "").trim();
+    if (fromRow) {
+      return fromRow;
+    }
+  }
+  return "";
+}
+
 function renderRankTable(table) {
   const columns = (table.columns || []).map((col) => ({
     key: col.key,
@@ -1123,7 +1139,11 @@ function renderRankTable(table) {
       return `<tr>${cells}</tr>`;
     })
     .join("");
-  return `<div class="rank-result-wrap"><table class="rank-result-table" style="min-width:${tableMinWidth}px"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+  const provinceLabel = rankTableProvinceLabel(table);
+  const headerHtml = provinceLabel
+    ? `<div class="rank-table-header" data-province="${escapeHtml(provinceLabel)}">${escapeHtml(provinceLabel)}</div>`
+    : "";
+  return `<section class="rank-table-block">${headerHtml}<div class="rank-result-wrap"><table class="rank-result-table" style="min-width:${tableMinWidth}px"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div></section>`;
 }
 
 function tierKeyFromTitle(title) {
@@ -1199,7 +1219,9 @@ function formatChatTables(tables) {
   if (!tables || tables.length === 0) {
     return "";
   }
-  return `<div class="chat-tables">${tables.map(renderChatTable).join("")}</div>`;
+  const rankMode = tables.some(isRankTable);
+  const className = rankMode ? "chat-tables chat-tables-rank" : "chat-tables";
+  return `<div class="${className}">${tables.map(renderChatTable).join("")}</div>`;
 }
 
 function buildMessageHtml(role, text, tables) {

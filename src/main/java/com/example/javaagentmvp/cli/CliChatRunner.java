@@ -3,6 +3,7 @@ package com.example.javaagentmvp.cli;
 import com.example.javaagentmvp.QwenApiLoggingAdvisor;
 import com.example.javaagentmvp.chat.AgentConversationRepository;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Profile;
@@ -65,7 +66,9 @@ public class CliChatRunner implements CommandLineRunner {
                 qwenApiLoggingAdvisor.resetSessionRound();
                 String response = chatClient.prompt()
                         .user(input)
-                        .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, conversationId.get()))
+                        .advisors(MessageChatMemoryAdvisor.builder(chatMemory)
+                                .conversationId(conversationId.get())
+                                .build())
                         .call()
                         .content();
                 System.out.println("\n🤖 " + response + "\n");
