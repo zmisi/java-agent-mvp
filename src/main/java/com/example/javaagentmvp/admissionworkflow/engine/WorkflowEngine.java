@@ -73,15 +73,15 @@ public class WorkflowEngine {
         return workflowTraceSupport.observeWorkflowRun(
                 runId,
                 definition.workflowType(),
-                () -> runNodes(definition, runId, run.inputMessage()));
+                () -> runNodes(definition, runId, run));
     }
 
-    private WorkflowExecutionResult runNodes(WorkflowDefinition definition, String runId, String inputMessage) {
-        WorkflowContext context = new WorkflowContext(runId, inputMessage);
+    private WorkflowExecutionResult runNodes(WorkflowDefinition definition, String runId, WorkflowRunSummaryRow run) {
+        WorkflowContext context = new WorkflowContext(runId, run.conversationId(), run.inputMessage());
         List<WorkflowCheckpointSummary> summaries = new ArrayList<>();
         int sequence = 1;
 
-        log.info("[WORKFLOW runId={}] start type={} message={}", runId, definition.workflowType(), inputMessage);
+        log.info("[WORKFLOW runId={}] start type={} message={}", runId, definition.workflowType(), run.inputMessage());
 
         for (WorkflowNode node : definition.nodes()) {
             Instant startedAt = Instant.now();

@@ -8,14 +8,13 @@ import com.example.javaagentmvp.admissionworkflow.engine.WorkflowDefinition;
 import com.example.javaagentmvp.admissionworkflow.engine.WorkflowEngine;
 import com.example.javaagentmvp.admissionworkflow.engine.WorkflowExecutionResult;
 import com.example.javaagentmvp.admissionworkflow.engine.WorkflowRunStatus;
-import com.example.javaagentmvp.admissionworkflow.intent.AdmissionIntentClassifier;
-import com.example.javaagentmvp.admissionworkflow.intent.ConversationTurnResolver;
 import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionCompilerProperties;
 import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionOntologyRegistry;
 import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionPriorSlotsBuilder;
 import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionQueryCompileService;
 import com.example.javaagentmvp.admissionworkflow.compiler.IntentServiceClient;
 import com.example.javaagentmvp.admissionworkflow.compiler.LocalAdmissionQueryCompiler;
+import com.example.javaagentmvp.admissionworkflow.compiler.UnsupportedConstraintRecorder;
 import com.example.javaagentmvp.admissionworkflow.nodes.CompileQueryNode;
 import com.example.javaagentmvp.admissionworkflow.nodes.FilterScoreMajorsNode;
 import com.example.javaagentmvp.admissionworkflow.nodes.FormatResponseNode;
@@ -26,6 +25,8 @@ import com.example.javaagentmvp.admissionworkflow.nodes.VerifyAnswerNode;
 import com.example.javaagentmvp.admissionworkflow.persistence.WorkflowRunRepository;
 import com.example.javaagentmvp.admissionworkflow.persistence.model.WorkflowRunSummaryRow;
 import com.example.javaagentmvp.admissionworkflow.tool.AdmissionScoreToolClient;
+import com.example.javaagentmvp.chat.ConversationPriorUserMessagesResolver;
+import com.example.javaagentmvp.chat.PostgresChatMemory;
 import com.example.javaagentmvp.observability.AgentMetrics;
 import com.example.javaagentmvp.observability.WorkflowTraceSupport;
 import com.example.javaagentmvp.rag.RagProperties;
@@ -54,6 +55,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -110,12 +112,18 @@ class WorkflowDeterministicEvalTest {
         if (evalCase.requireScoreResult()) {
             ObjectNode scoreFixture = new ObjectMapper().createObjectNode();
             scoreFixture.put("count", 2);
+            scoreFixture.put("user_rank", 8000);
+            scoreFixture.put("user_score", 620);
+            ObjectNode byTier = scoreFixture.putObject("majors_by_tier");
+            byTier.putArray("冲");
+            byTier.putArray("稳");
+            byTier.putArray("保");
             scoreFixture.putArray("majors")
                     .addObject()
                     .put("major_name", "计算机科学与技术")
                     .put("min_score", 610)
                     .put("university", "合肥工业大学");
-            when(admissionScoreToolClient.getMajorByScore(
+            when(admissionScoreToolClient.getMajorsForScore(
                     eq(runId), anyInt(), anyString(), any(), any(), any()))
                     .thenReturn(scoreFixture);
         }
@@ -162,30 +170,31 @@ class WorkflowDeterministicEvalTest {
 
     private WorkflowDefinition workflowDefinition() throws Exception {
         RagProperties ragProperties = ragProperties();
-        AdmissionIntentClassifier classifier = new AdmissionIntentClassifier(
-                new RagQueryRouter(ragProperties, new ConversationTurnResolver()),
-                ragProperties);
         AdmissionOntologyRegistry ontologyRegistry = new AdmissionOntologyRegistry();
         ontologyRegistry.load();
         LocalAdmissionQueryCompiler localCompiler = new LocalAdmissionQueryCompiler(
-                classifier,
                 ontologyRegistry,
-                new ConversationTurnResolver(),
-                new AdmissionPriorSlotsBuilder(ontologyRegistry));
+                new AdmissionPriorSlotsBuilder(ontologyRegistry),
+                new RagQueryRouter(ragProperties));
         AdmissionQueryCompileService compileService = new AdmissionQueryCompileService(
                 AdmissionCompilerProperties.defaults(),
                 new IntentServiceClient(AdmissionCompilerProperties.defaults(), org.springframework.web.client.RestClient.builder()),
                 localCompiler,
                 new AdmissionPriorSlotsBuilder(ontologyRegistry));
         ObjectMapper objectMapper = new ObjectMapper();
+        PostgresChatMemory chatMemory = mock(PostgresChatMemory.class);
+        ConversationPriorUserMessagesResolver priorUserMessagesResolver =
+                new ConversationPriorUserMessagesResolver(chatMemory);
+        @SuppressWarnings("unchecked")
+        ObjectProvider<UnsupportedConstraintRecorder> recorderProvider = mock(ObjectProvider.class);
         return new WorkflowDefinition(
                 "admission_report",
                 List.of(
-                        new CompileQueryNode(compileService),
+                        new CompileQueryNode(compileService, priorUserMessagesResolver, recorderProvider),
                         new ScoreToolNode(admissionScoreToolClient, objectMapper),
                         new PreferenceRagNode(ragRetrievalServiceProvider),
                         new FilterScoreMajorsNode(ragProperties, objectMapper),
-                        new PolicyRagNode(ragRetrievalServiceProvider, classifier, ragProperties),
+                        new PolicyRagNode(ragRetrievalServiceProvider, ragProperties),
                         new VerifyAnswerNode(),
                         new FormatResponseNode()));
     }

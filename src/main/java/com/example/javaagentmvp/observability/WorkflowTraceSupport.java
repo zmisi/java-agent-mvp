@@ -1,7 +1,7 @@
 package com.example.javaagentmvp.observability;
 
 import com.example.javaagentmvp.admissionworkflow.intent.AdmissionIntent;
-import com.example.javaagentmvp.admissionworkflow.nodes.IntentClassifyNode;
+import com.example.javaagentmvp.admissionworkflow.nodes.CompileQueryNode;
 import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationRegistry;
 import org.slf4j.MDC;
@@ -75,7 +75,7 @@ public class WorkflowTraceSupport {
         if (state == null) {
             return null;
         }
-        Object intent = state.get(IntentClassifyNode.KEY_INTENT);
+        Object intent = state.get(CompileQueryNode.KEY_INTENT);
         if (intent instanceof AdmissionIntent admissionIntent) {
             return admissionIntent.name();
         }

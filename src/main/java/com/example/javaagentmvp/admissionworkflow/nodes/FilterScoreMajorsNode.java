@@ -47,7 +47,7 @@ public class FilterScoreMajorsNode implements WorkflowNode {
             return WorkflowNodeResult.skipped("awaiting clarification");
         }
 
-        AdmissionIntent intent = context.get(IntentClassifyNode.KEY_INTENT, AdmissionIntent.class);
+        AdmissionIntent intent = context.get(CompileQueryNode.KEY_INTENT, AdmissionIntent.class);
         if (intent == AdmissionIntent.RANK) {
             return WorkflowNodeResult.skipped("rank query — no major filtering");
         }
@@ -70,6 +70,15 @@ public class FilterScoreMajorsNode implements WorkflowNode {
             return WorkflowNodeResult.skipped("no score result to filter");
         }
 
+        if (rawScoreResult.has("majors_by_tier") && rawScoreResult.path("majors_by_tier").isObject()) {
+            context.put(KEY_FILTERED_SCORE_RESULT, rawScoreResult);
+            return WorkflowNodeResult.succeeded(Map.of(
+                    "matchedCount", rawScoreResult.path("count").asInt(0),
+                    "totalCount", rawScoreResult.path("count").asInt(0),
+                    "tierOnly", true,
+                    "rankBased", true));
+        }
+
         Integer score = resolveScore(context, query);
         if (score == null) {
             context.put(KEY_FILTERED_SCORE_RESULT, rawScoreResult);
@@ -89,7 +98,8 @@ public class FilterScoreMajorsNode implements WorkflowNode {
 
         boolean constraintOnly = constraints.hasExclusions()
                 || constraints.hasProvinceFilter()
-                || constraints.hasPreferenceRanking();
+                || constraints.hasPreferenceRanking()
+                || constraints.hasMajorCategoryFilter();
         if (!hints.schoolSpecified() && !hints.majorSpecified() && !constraintOnly) {
             return WorkflowNodeResult.succeeded(Map.of(
                     "matchedCount", filtered.matchedCount(),

@@ -7,7 +7,8 @@ public record AdmissionCompilerProperties(
         boolean enabled,
         String baseUrl,
         int timeoutMs,
-        boolean fallbackToLocal) {
+        boolean fallbackToLocal,
+        boolean recordUnsupported) {
 
     public AdmissionCompilerProperties {
         if (baseUrl == null || baseUrl.isBlank()) {
@@ -19,6 +20,6 @@ public record AdmissionCompilerProperties(
     }
 
     public static AdmissionCompilerProperties defaults() {
-        return new AdmissionCompilerProperties(false, "http://localhost:8090", 3_000, true);
+        return new AdmissionCompilerProperties(false, "http://localhost:8090", 3_000, true, true);
     }
 }

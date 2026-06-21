@@ -51,7 +51,7 @@ public class PublicChatController {
         conversationRepository.insertIfMissing(conversationId, "访客对话", now);
         conversationRepository.touchUpdatedAt(conversationId, now, null);
         try {
-            return chatTurnService.execute(conversationId, message);
+            return chatTurnService.execute(conversationId, message, null, "guest");
         }
         catch (RuntimeException ex) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, ex.getMessage(), ex);

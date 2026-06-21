@@ -5,7 +5,9 @@ import com.example.javaagentmvp.LoggingToolCallback;
 import com.example.javaagentmvp.McpTableCapturingToolCallback;
 import com.example.javaagentmvp.QwenApiLoggingAdvisor;
 import com.example.javaagentmvp.dbagent.DbAgentTargetRegistry;
+import com.example.javaagentmvp.chat.ui.ChatTableEnrichmentService;
 import com.example.javaagentmvp.chat.ui.McpTableExtractor;
+import com.example.javaagentmvp.chat.ui.UniversityProfileProperties;
 import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionQueryCompileService;
 import com.example.javaagentmvp.rag.AdmissionsAnswerFormatAdvisor;
 import com.example.javaagentmvp.rag.ConditionalQuestionAnswerAdvisor;
@@ -29,7 +31,7 @@ import com.example.javaagentmvp.chat.persistence.mapper.ChatMemoryMessageMapper;
 import java.util.List;
 
 @Configuration
-@EnableConfigurationProperties({AgentPromptProperties.class, RagProperties.class})
+@EnableConfigurationProperties({AgentPromptProperties.class, RagProperties.class, UniversityProfileProperties.class})
 public class ChatClientConfiguration {
 
     @Bean
@@ -42,11 +44,13 @@ public class ChatClientConfiguration {
             ChatMemoryMessageMapper chatMemoryMessageMapper,
             ObjectMapper objectMapper,
             McpTableExtractor mcpTableExtractor,
+            ChatTableEnrichmentService tableEnrichmentService,
             ChatMemoryProperties chatMemoryProperties) {
         return new PostgresChatMemory(
                 chatMemoryMessageMapper,
                 objectMapper,
                 mcpTableExtractor,
+                tableEnrichmentService,
                 chatMemoryProperties.maxMessages());
     }
 
@@ -63,8 +67,16 @@ public class ChatClientConfiguration {
     }
 
     @Bean
-    ResolvedTurnAdvisor resolvedTurnAdvisor(AdmissionQueryCompileService admissionQueryCompileService) {
-        return new ResolvedTurnAdvisor(admissionQueryCompileService);
+    AdmissionQueryAdvisor admissionQueryAdvisor(AdmissionQueryCompileService admissionQueryCompileService) {
+        return new AdmissionQueryAdvisor(admissionQueryCompileService);
+    }
+
+    @Bean
+    ForcedMcpAdvisor forcedMcpAdvisor(
+            com.example.javaagentmvp.admissionworkflow.execution.AdmissionQueryMcpExecutor admissionQueryMcpExecutor,
+            AgentPromptProperties agentPromptProperties,
+            org.springframework.core.io.ResourceLoader resourceLoader) {
+        return new ForcedMcpAdvisor(admissionQueryMcpExecutor, agentPromptProperties, resourceLoader);
     }
 
     @Bean
@@ -74,7 +86,8 @@ public class ChatClientConfiguration {
             QwenApiLoggingAdvisor qwenApiLoggingAdvisor,
             AgentSystemPrompt agentSystemPrompt,
             RagProperties ragProperties,
-            ResolvedTurnAdvisor resolvedTurnAdvisor,
+            AdmissionQueryAdvisor admissionQueryAdvisor,
+            ForcedMcpAdvisor forcedMcpAdvisor,
             ObjectProvider<RagFlowStartAdvisor> ragFlowStartAdvisor,
             ObjectProvider<AdmissionsAnswerFormatAdvisor> admissionsAnswerFormatAdvisor,
             ObjectProvider<ConditionalQuestionAnswerAdvisor> conditionalQuestionAnswerAdvisor,
@@ -94,7 +107,8 @@ public class ChatClientConfiguration {
                 .defaultAdvisors(
                         qwenApiLoggingAdvisor,
                         chatContextUsageAdvisor,
-                        resolvedTurnAdvisor);
+                        admissionQueryAdvisor,
+                        forcedMcpAdvisor);
 
         ragFlowStartAdvisor.ifAvailable(builder::defaultAdvisors);
         admissionsAnswerFormatAdvisor.ifAvailable(builder::defaultAdvisors);

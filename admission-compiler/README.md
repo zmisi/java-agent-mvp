@@ -7,7 +7,7 @@
 ```
 用户消息 + 多轮上下文
     → L1 规则抽槽 (rules.py，对齐 Java AdmissionInputParser)
-    → L2 本体归一化 (ontology/*.yaml：区域、排除、软偏好)
+    → L2 本体归一化 (`src/main/resources/admission-ontology/*.yaml`：区域、排除、软偏好)
     → L3 可选 LLM 增强 (COMPILER_USE_LLM=true)
     → AdmissionQuery JSON
 ```
@@ -52,11 +52,13 @@ curl -s http://localhost:8090/compile \
 
 ## 本体维护
 
-编辑 `ontology/` 下 YAML，无需改代码：
+编辑 **`src/main/resources/admission-ontology/`** 下 YAML（Java 与 Python compiler 共用），无需改代码：
 
 - `regions.yaml` — 「长三角」→ 江苏/浙江/上海
 - `exclusions.yaml` — 「不当老师」→ 排除师范
 - `preferences.yaml` — 「央国企」→ `state_owned_employability`
+
+Docker 构建时从该目录复制到 Python 服务镜像内的 `./ontology`。
 
 ## 可选 LLM 增强
 

@@ -14,6 +14,8 @@ public record QueryConstraints(
         List<String> excludeSchoolNameContains,
         List<String> excludeMajorKeywords,
         List<String> includeMajorKeywords,
+        List<String> includeMajorDisciplineGroups,
+        List<String> includeDisciplineCategories,
         List<AdmissionPreferenceIr> preferences,
         List<String> preferenceBoostKeywords) {
 
@@ -31,6 +33,8 @@ public record QueryConstraints(
                 filters.excludeSchoolNameContains(),
                 filters.excludeMajorKeywords(),
                 includeMajors,
+                filters.includeMajorDisciplineGroups(),
+                filters.includeDisciplineCategories(),
                 preferences,
                 QueryPlanner.preferenceMajorBoostKeywords(query));
     }
@@ -42,6 +46,11 @@ public record QueryConstraints(
     public boolean hasExclusions() {
         return (excludeSchoolNameContains != null && !excludeSchoolNameContains.isEmpty())
                 || (excludeMajorKeywords != null && !excludeMajorKeywords.isEmpty());
+    }
+
+    public boolean hasMajorCategoryFilter() {
+        return (includeMajorDisciplineGroups != null && !includeMajorDisciplineGroups.isEmpty())
+                || (includeDisciplineCategories != null && !includeDisciplineCategories.isEmpty());
     }
 
     public boolean hasPreferenceRanking() {

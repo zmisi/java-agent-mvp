@@ -42,8 +42,9 @@ public class AdmissionQueryCompileService {
         if (properties.enabled()) {
             Optional<AdmissionQueryIr> remote = intentServiceClient.compile(message, priorSlots, priorMessages);
             if (remote.isPresent()) {
-                logCompileResult("remote", message, priorMessages, priorSlots, remote.get());
-                return remote.get();
+                AdmissionQueryIr query = remote.get();
+                logCompileResult("remote", message, priorMessages, priorSlots, query);
+                return query;
             }
             log.info("admission-compiler remote miss, falling back to local compiler");
         }
@@ -64,7 +65,7 @@ public class AdmissionQueryCompileService {
             AdmissionSlotsIr priorSlots,
             AdmissionQueryIr query) {
         String detail = String.format(
-                "source=%s task=%s score=%s provinces=%s subject=%s confidence=%.2f needs=%s priorTurns=%d priorSlots=%s",
+                "source=%s task=%s score=%s provinces=%s subject=%s confidence=%.2f needs=%s unsupported=%s priorTurns=%d priorSlots=%s",
                 source,
                 query.task(),
                 query.slots().score(),
@@ -72,6 +73,9 @@ public class AdmissionQueryCompileService {
                 query.slots().subjectGroup(),
                 query.confidence(),
                 query.needsClarification(),
+                query.unsupportedConstraints().stream()
+                        .map(UnsupportedConstraintIr::constraintType)
+                        .toList(),
                 priorMessages.size(),
                 priorSlots);
         log.info("AdmissionQueryCompile: {}", detail);

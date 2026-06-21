@@ -1162,6 +1162,48 @@ function tierKeyFromTitle(title) {
   return "default";
 }
 
+function hasDisplayText(value) {
+  const text = String(value || "").trim();
+  return text.length > 0 && text !== "-";
+}
+
+function renderSchoolTags(tags) {
+  if (!tags || tags.length === 0) {
+    return "";
+  }
+  return `<div class="chat-table-school-tags">${tags
+    .map((tag) => `<span class="chat-table-school-tag">${escapeHtml(tag)}</span>`)
+    .join("")}</div>`;
+}
+
+function renderSchoolLogo(logoUrl, universityName) {
+  const initial = escapeHtml((universityName || "校").slice(0, 1));
+  if (!hasDisplayText(logoUrl)) {
+    return `<div class="chat-table-school-logo chat-table-school-logo-fallback" aria-hidden="true">${initial}</div>`;
+  }
+  const fallbackChar = JSON.stringify((universityName || "校").slice(0, 1));
+  return `<img class="chat-table-school-logo" src="${escapeHtml(logoUrl)}" alt="" loading="lazy" decoding="async" onerror='this.replaceWith(Object.assign(document.createElement("div"),{className:"chat-table-school-logo chat-table-school-logo-fallback",ariaHidden:"true",textContent:${fallbackChar}}))'/>`;
+}
+
+function renderSchoolLocation(group) {
+  const province = hasDisplayText(group.province) ? group.province : "";
+  const department = hasDisplayText(group.department) ? group.department : "";
+  if (!province && !department) {
+    return "";
+  }
+  const parts = [];
+  if (province) {
+    parts.push(`<span class="chat-table-school-province"><span class="chat-table-school-pin" aria-hidden="true"></span>${escapeHtml(province)}</span>`);
+  }
+  if (province && department) {
+    parts.push('<span class="chat-table-school-divider" aria-hidden="true"></span>');
+  }
+  if (department) {
+    parts.push(`<span class="chat-table-school-department">${escapeHtml(department)}</span>`);
+  }
+  return `<div class="chat-table-school-location">${parts.join("")}</div>`;
+}
+
 function renderSchoolGroup(group, columns) {
   const majors = group.majors || [];
   const majorCount = group.majorCount || majors.length;
@@ -1170,12 +1212,25 @@ function renderSchoolGroup(group, columns) {
     ? `${majorCount}个专业`
     : `${majorCount}个专业 · ${minScore}起`;
   const displayColumns = majorColumnsFromTable(columns);
+  const tagsHtml = renderSchoolTags(group.tags || []);
+  const locationHtml = renderSchoolLocation(group);
+  const titleExtra = (locationHtml || tagsHtml)
+    ? `<div class="chat-table-school-title-extra">${locationHtml}${tagsHtml}</div>`
+    : "";
   return `<details class="chat-table-school">
     <summary class="chat-table-school-header">
-      <span class="chat-table-school-main">
-        <span class="chat-table-school-name">${escapeHtml(group.universityName || "未知院校")}</span>
-        <span class="chat-table-school-meta">${escapeHtml(headerMeta)}</span>
-      </span>
+      <div class="chat-table-school-card">
+        <div class="chat-table-school-logo-wrap">
+          ${renderSchoolLogo(group.logoUrl, group.universityName)}
+        </div>
+        <div class="chat-table-school-main">
+          <div class="chat-table-school-title-row">
+            <span class="chat-table-school-name">${escapeHtml(group.universityName || "未知院校")}</span>
+            ${titleExtra}
+          </div>
+          <span class="chat-table-school-meta">${escapeHtml(headerMeta)}</span>
+        </div>
+      </div>
       <span class="chat-table-school-chevron" aria-hidden="true"></span>
     </summary>
     <div class="major-table-wrap">

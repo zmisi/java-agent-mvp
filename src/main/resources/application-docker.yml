@@ -21,6 +21,9 @@ app:
     base-url: ${APP_ADMISSION_COMPILER_BASE_URL:http://admission-compiler:8090}
     timeout-ms: 3000
     fallback-to-local: true
+  university-profile:
+    enabled: true
+    logo-dir: /app/data/chsi/universities/logos
   db-agent:
     chat-target: chat-readonly
     targets:

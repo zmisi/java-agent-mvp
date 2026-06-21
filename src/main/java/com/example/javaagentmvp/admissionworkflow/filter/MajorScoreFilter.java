@@ -92,6 +92,10 @@ public final class MajorScoreFilter {
                 payload.putPOJO("excludeSchoolNameContains", constraints.excludeSchoolNameContains());
                 payload.putPOJO("excludeMajorKeywords", constraints.excludeMajorKeywords());
             }
+            if (constraints.hasMajorCategoryFilter()) {
+                payload.putPOJO("includeMajorDisciplineGroups", constraints.includeMajorDisciplineGroups());
+                payload.putPOJO("includeDisciplineCategories", constraints.includeDisciplineCategories());
+            }
         }
 
         return new FilterResult(
@@ -99,7 +103,9 @@ public final class MajorScoreFilter {
                 filtered.size(),
                 totalCount,
                 hints.schoolSpecified(),
-                hints.majorSpecified() || (constraints != null && !constraints.includeMajorKeywords().isEmpty()),
+                hints.majorSpecified()
+                        || (constraints != null && !constraints.includeMajorKeywords().isEmpty())
+                        || (constraints != null && constraints.hasMajorCategoryFilter()),
                 tierCounts);
     }
 
@@ -168,6 +174,10 @@ public final class MajorScoreFilter {
             }
         }
 
+        if (constraints.hasMajorCategoryFilter() && !matchesMajorCategory(major, constraints)) {
+            return false;
+        }
+
         if (!constraints.includeMajorKeywords().isEmpty()) {
             boolean includeMatched = false;
             for (String keyword : constraints.includeMajorKeywords()) {
@@ -181,6 +191,130 @@ public final class MajorScoreFilter {
             }
         }
         return true;
+    }
+
+    private static boolean matchesMajorCategory(JsonNode major, QueryConstraints constraints) {
+        String majorName = text(major.get("major_name"));
+        String disciplineCategory = text(major.get("discipline_category"));
+        List<String> disciplineGroups = readStringArray(major.get("discipline_groups"));
+        boolean hasCatalogData = !disciplineCategory.isEmpty() || !disciplineGroups.isEmpty();
+
+        if (hasCatalogData) {
+            boolean groupMatch = false;
+            boolean categoryMatch = false;
+
+            if (constraints.includeMajorDisciplineGroups() != null
+                    && !constraints.includeMajorDisciplineGroups().isEmpty()) {
+                for (String group : constraints.includeMajorDisciplineGroups()) {
+                    if (!group.isBlank() && disciplineGroups.contains(group)) {
+                        groupMatch = true;
+                        break;
+                    }
+                }
+            }
+            if (constraints.includeDisciplineCategories() != null
+                    && !constraints.includeDisciplineCategories().isEmpty()) {
+                categoryMatch = constraints.includeDisciplineCategories().contains(disciplineCategory);
+            }
+
+            if (constraints.includeMajorDisciplineGroups() != null
+                    && !constraints.includeMajorDisciplineGroups().isEmpty()
+                    && constraints.includeDisciplineCategories() != null
+                    && !constraints.includeDisciplineCategories().isEmpty()) {
+                return groupMatch || categoryMatch;
+            }
+            if (constraints.includeMajorDisciplineGroups() != null
+                    && !constraints.includeMajorDisciplineGroups().isEmpty()) {
+                return groupMatch;
+            }
+            return categoryMatch;
+        }
+
+        return matchesMajorNameForCategoryFilters(majorName, constraints);
+    }
+
+    private static boolean matchesMajorNameForCategoryFilters(String majorName, QueryConstraints constraints) {
+        if (majorName.isBlank()) {
+            return false;
+        }
+        boolean groupMatch = false;
+        boolean categoryMatch = false;
+
+        if (constraints.includeMajorDisciplineGroups() != null) {
+            for (String group : constraints.includeMajorDisciplineGroups()) {
+                if (matchesDisciplineGroupByName(majorName, group)) {
+                    groupMatch = true;
+                    break;
+                }
+            }
+        }
+        if (constraints.includeDisciplineCategories() != null) {
+            for (String category : constraints.includeDisciplineCategories()) {
+                if (matchesDisciplineCategoryByName(majorName, category)) {
+                    categoryMatch = true;
+                    break;
+                }
+            }
+        }
+
+        if (constraints.includeMajorDisciplineGroups() != null
+                && !constraints.includeMajorDisciplineGroups().isEmpty()
+                && constraints.includeDisciplineCategories() != null
+                && !constraints.includeDisciplineCategories().isEmpty()) {
+            return groupMatch || categoryMatch;
+        }
+        if (constraints.includeMajorDisciplineGroups() != null
+                && !constraints.includeMajorDisciplineGroups().isEmpty()) {
+            return groupMatch;
+        }
+        return categoryMatch;
+    }
+
+    private static boolean matchesDisciplineGroupByName(String majorName, String group) {
+        return switch (group) {
+            case "工科" -> containsAny(majorName, "工程", "技术", "机械", "电子", "电气", "计算机", "软件", "土木", "建筑", "材料", "环境", "能源", "自动化", "信息");
+            case "理科" -> containsAny(majorName, "数学", "物理", "化学", "生物", "科学", "统计", "地理", "地质", "天文");
+            case "文科" -> containsAny(majorName, "语言", "文学", "历史", "哲学", "新闻", "传播", "汉语", "英语", "日语", "法学", "政治", "社会");
+            case "医科" -> containsAny(majorName, "医学", "临床", "护理", "药学", "中医", "口腔", "康复", "预防");
+            default -> false;
+        };
+    }
+
+    private static boolean matchesDisciplineCategoryByName(String majorName, String category) {
+        return switch (category) {
+            case "经济学" -> containsAny(majorName, "经济", "金融", "财政", "税收", "贸易", "保险", "投资");
+            case "管理学" -> containsAny(majorName, "管理", "工商", "会计", "市场", "营销", "人力", "物流", "电商", "商务", "行政", "公共事业");
+            case "法学" -> containsAny(majorName, "法学", "法律");
+            case "教育学" -> containsAny(majorName, "教育", "师范", "学前");
+            case "文学" -> containsAny(majorName, "语言", "文学", "汉语", "英语", "日语", "翻译", "新闻", "传播");
+            case "工学" -> matchesDisciplineGroupByName(majorName, "工科");
+            case "理学" -> matchesDisciplineGroupByName(majorName, "理科");
+            case "医学" -> matchesDisciplineGroupByName(majorName, "医科");
+            default -> majorName.contains(category);
+        };
+    }
+
+    private static boolean containsAny(String text, String... tokens) {
+        for (String token : tokens) {
+            if (text.contains(token)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static List<String> readStringArray(JsonNode node) {
+        if (node == null || !node.isArray()) {
+            return List.of();
+        }
+        List<String> values = new ArrayList<>();
+        node.forEach(item -> {
+            String value = item.asText("").strip();
+            if (!value.isEmpty()) {
+                values.add(value);
+            }
+        });
+        return values;
     }
 
     private static Map<String, List<JsonNode>> classifyTiers(List<JsonNode> majors, int userScore) {

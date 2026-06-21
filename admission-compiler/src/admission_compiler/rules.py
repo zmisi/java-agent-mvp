@@ -29,6 +29,10 @@ MAJOR_SEARCH_HINT = re.compile(
     r"专业|报什么|什么专业|哪些专业|可报|能上什么|报考|报志愿|志愿|什么学校|哪些学校|院校"
 )
 UNIVERSITY_HINT = re.compile(r"大学")
+RANK_WITH_MING = re.compile(r"排名\s*(\d+)\s*名")
+RANK_DEDI = re.compile(r"第\s*(\d+)\s*名")
+RANK_WEICI = re.compile(r"位次\s*(\d+)")
+RANK_WEI = re.compile(r"(\d+)\s*位(?!次)")
 RANK_HINT = re.compile(r"排名|位次|名次|排多少|多少位|多少名|排第几")
 
 MAJOR_KEYWORDS = (
@@ -44,6 +48,7 @@ MAJOR_KEYWORDS = (
 @dataclass
 class RuleParseResult:
     score: int | None = None
+    rank: int | None = None
     provinces: list[str] | None = None
     subject_group: str | None = None
     year: int | None = None
@@ -63,6 +68,10 @@ def parse_rules(message: str) -> RuleParseResult:
     score = _parse_score(normalized)
     if score is not None:
         applied.append("score")
+
+    rank = _parse_rank(normalized)
+    if rank is not None:
+        applied.append("rank")
 
     provinces = _parse_provinces(normalized)
     if provinces:
@@ -84,11 +93,12 @@ def parse_rules(message: str) -> RuleParseResult:
     if majors:
         applied.append("major_keywords")
 
-    task = _detect_task(normalized, score)
+    task = _detect_task(normalized, score, rank)
     applied.append(f"task:{task.value}")
 
     return RuleParseResult(
         score=score,
+        rank=rank,
         provinces=provinces,
         subject_group=subject_group,
         year=year,
@@ -156,7 +166,34 @@ def _parse_major_keywords(message: str) -> list[str]:
     return matched
 
 
-def _detect_task(message: str, score: int | None) -> Task:
+def parse_include_major_keywords(message: str) -> list[str]:
+    return _parse_major_keywords((message or "").strip())
+
+
+def _parse_rank(message: str) -> int | None:
+    for pattern in (RANK_WITH_MING, RANK_DEDI, RANK_WEICI, RANK_WEI):
+        match = pattern.search(message)
+        if match:
+            return int(match.group(1))
+
+    has_rank_hint = bool(RANK_HINT.search(message))
+    match = RANK_MING.search(message)
+    if match and has_rank_hint:
+        return int(match.group(1))
+
+    years = {int(m.group(1)) for m in YEAR_PATTERN.finditer(message)}
+    last: int | None = None
+    for match in BARE_NUMBER.finditer(message):
+        value = int(match.group(1))
+        if value in years or _is_plausible_score(value):
+            continue
+        last = value
+    if last is not None and has_rank_hint:
+        return last
+    return None
+
+
+def _detect_task(message: str, score: int | None, rank: int | None) -> Task:
     has_policy = bool(POLICY_PATTERN.search(message))
     has_major_search = bool(MAJOR_SEARCH_HINT.search(message))
     has_university_search = bool(UNIVERSITY_HINT.search(message)) and not has_policy
@@ -170,6 +207,6 @@ def _detect_task(message: str, score: int | None) -> Task:
         return Task.POLICY_QA
     if has_major_search or has_university_search:
         return Task.SEARCH_MAJORS
-    if score is not None:
+    if score is not None or rank is not None:
         return Task.SEARCH_MAJORS
     return Task.UNKNOWN

@@ -9,6 +9,7 @@ import java.util.List;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record AdmissionSlotsIr(
         @JsonProperty("score") Integer score,
+        @JsonProperty("rank") Integer rank,
         @JsonProperty("provinces") List<String> provinces,
         @JsonProperty("subject_group") String subjectGroup,
         @JsonProperty("year") Integer year,
@@ -21,7 +22,7 @@ public record AdmissionSlotsIr(
     }
 
     public static AdmissionSlotsIr empty() {
-        return new AdmissionSlotsIr(null, List.of(), null, null, null);
+        return new AdmissionSlotsIr(null, null, List.of(), null, null, null);
     }
 
     public String primaryProvince() {
@@ -33,7 +34,7 @@ public record AdmissionSlotsIr(
     }
 
     public AdmissionSlotsIr withoutProvinces() {
-        return new AdmissionSlotsIr(score, List.of(), subjectGroup, year, admissionType);
+        return new AdmissionSlotsIr(score, rank, List.of(), subjectGroup, year, admissionType);
     }
 
     public AdmissionSlotsIr mergedWith(AdmissionSlotsIr prior) {
@@ -48,9 +49,14 @@ public record AdmissionSlotsIr(
         }
         return new AdmissionSlotsIr(
                 score != null ? score : prior.score(),
+                rank != null ? rank : prior.rank(),
                 mergedProvinces,
                 subjectGroup != null ? subjectGroup : prior.subjectGroup(),
                 year != null ? year : prior.year(),
                 admissionType != null ? admissionType : prior.admissionType());
+    }
+
+    public boolean hasScoreOrRank() {
+        return score != null || rank != null;
     }
 }

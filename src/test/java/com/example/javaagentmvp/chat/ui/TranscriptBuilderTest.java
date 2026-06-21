@@ -13,7 +13,8 @@ class TranscriptBuilderTest {
 
     private final TranscriptBuilder builder = new TranscriptBuilder(
             new McpTableExtractor(new ObjectMapper()),
-            new ObjectMapper());
+            new ObjectMapper(),
+            ChatTableEnrichmentService.noop());
 
     @Test
     void readsPersistedUiTablesFromAssistantPayload() {

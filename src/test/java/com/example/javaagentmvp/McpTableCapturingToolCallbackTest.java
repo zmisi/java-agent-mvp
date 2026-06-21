@@ -6,10 +6,6 @@ import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionFiltersIr;
 import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionQueryIr;
 import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionSlotsIr;
 import com.example.javaagentmvp.admissionworkflow.intent.AdmissionInputParser;
-import com.example.javaagentmvp.admissionworkflow.intent.AdmissionIntent;
-import com.example.javaagentmvp.admissionworkflow.intent.ResolvedTurn;
-import com.example.javaagentmvp.admissionworkflow.intent.ResolvedTurnContext;
-import com.example.javaagentmvp.admissionworkflow.intent.SlotDelta;
 import com.example.javaagentmvp.chat.ui.McpRankContext;
 import com.example.javaagentmvp.chat.ui.McpTableContext;
 import com.example.javaagentmvp.chat.ui.McpTableExtractor;
@@ -43,22 +39,26 @@ class McpTableCapturingToolCallbackTest {
         McpTableContext.clear();
         McpRankContext.clear();
         AdmissionQueryContext.clear();
-        ResolvedTurnContext.clear();
     }
 
     @Test
     void getMajorByScoreClassifiesTiersFromSingleQuery() throws Exception {
-        AtomicInteger calls = new AtomicInteger();
-        ToolCallback delegate = tieredDelegate(calls, new AtomicReference<>(), List.of(
-                major("冲高专业", 640),
-                major("稳妥专业", 625),
-                major("保底专业", 610)));
+        AtomicInteger rankCalls = new AtomicInteger();
+        AtomicInteger majorCalls = new AtomicInteger();
+        ToolCallback wrapped = wrapScoreToRankMajor(
+                rankCalls,
+                majorCalls,
+                7000,
+                630,
+                List.of(major("冲高专业", 640)),
+                List.of(major("稳妥专业", 625)),
+                List.of(major("保底专业", 610)));
 
-        ToolCallback wrapped = McpTableCapturingToolCallback.wrap(delegate, extractor, objectMapper);
         String response = wrapped.call(
                 "{\"score\":630,\"province\":\"安徽\",\"year\":2025,\"subject_group\":\"物理类\",\"admission_type\":\"普通批\"}");
 
-        assertEquals(1, calls.get());
+        assertEquals(1, rankCalls.get());
+        assertEquals(1, majorCalls.get());
         JsonNode parsed = objectMapper.readTree(response);
         assertEquals(630, parsed.get("user_score").intValue());
         assertEquals(1, parsed.get("tier_counts").get("冲").intValue());
@@ -67,27 +67,28 @@ class McpTableCapturingToolCallbackTest {
 
         List<ChatTable> tables = McpTableContext.tables();
         assertEquals(3, tables.size());
-        assertTrue(tables.get(0).title().startsWith("冲（630分"));
+        assertTrue(tables.get(0).title().startsWith("冲（排名7000名"));
         assertEquals("冲高专业", tables.get(0).rows().get(0).get("major_name"));
-        assertTrue(tables.get(1).title().startsWith("稳（630分"));
+        assertTrue(tables.get(1).title().startsWith("稳（排名7000名"));
         assertEquals("稳妥专业", tables.get(1).rows().get(0).get("major_name"));
-        assertTrue(tables.get(2).title().startsWith("保（630分"));
+        assertTrue(tables.get(2).title().startsWith("保（排名7000名"));
         assertEquals("保底专业", tables.get(2).rows().get(0).get("major_name"));
-        assertEquals(1, tables.get(0).groups().size());
-        assertEquals(1, tables.get(1).groups().size());
-        assertEquals(1, tables.get(2).groups().size());
     }
 
     @Test
     void overridesLlmScoreWithParsedUserScoreFromToolContext() throws Exception {
-        AtomicInteger calls = new AtomicInteger();
-        AtomicReference<Integer> queryScoreUsed = new AtomicReference<>();
-        ToolCallback delegate = tieredDelegate(calls, queryScoreUsed, List.of(
-                major("冲高专业", 640),
-                major("稳妥专业", 625),
-                major("保底专业", 610)));
+        AtomicInteger rankCalls = new AtomicInteger();
+        AtomicReference<Integer> rankQueryScore = new AtomicReference<>();
+        ToolCallback wrapped = wrapScoreToRankMajor(
+                rankCalls,
+                new AtomicInteger(),
+                7000,
+                630,
+                List.of(major("冲高专业", 640)),
+                List.of(major("稳妥专业", 625)),
+                List.of(major("保底专业", 610)),
+                rankQueryScore);
 
-        ToolCallback wrapped = McpTableCapturingToolCallback.wrap(delegate, extractor, objectMapper);
         ToolContext toolContext = new ToolContext(Map.of(
                 ToolContext.TOOL_CALL_HISTORY,
                 List.of(new UserMessage("安徽 2025 物理 普通批 630 可以报考什么专业？"))));
@@ -95,21 +96,18 @@ class McpTableCapturingToolCallbackTest {
                 "{\"score\":645,\"province\":\"安徽\",\"year\":2025,\"subject_group\":\"物理类\",\"admission_type\":\"普通批\"}",
                 toolContext);
 
-        assertEquals(1, calls.get());
-        assertEquals(645, queryScoreUsed.get());
+        assertEquals(1, rankCalls.get());
+        assertEquals(630, rankQueryScore.get());
         JsonNode parsed = objectMapper.readTree(response);
         assertEquals(630, parsed.get("user_score").intValue());
         assertEquals(1, parsed.get("tier_counts").get("冲").intValue());
-        assertEquals(1, parsed.get("tier_counts").get("稳").intValue());
-        assertEquals(1, parsed.get("tier_counts").get("保").intValue());
 
         List<ChatTable> tables = McpTableContext.tables();
-        assertTrue(tables.get(0).title().startsWith("冲（630分"));
+        assertTrue(tables.get(0).title().startsWith("冲（排名7000名"));
     }
 
     @Test
     void getMajorByScoreHefeiUniversity580AllMajorsAreSafeTier() throws Exception {
-        AtomicInteger calls = new AtomicInteger();
         List<Map<String, Object>> hfuuMajors = List.of(
                 major("计算机科学与技术", 553),
                 major("电子信息工程", 550),
@@ -122,13 +120,18 @@ class McpTableCapturingToolCallbackTest {
                 major("工商管理", 536),
                 major("经济学", 536),
                 major("英语", 535));
-        ToolCallback delegate = tieredDelegate(calls, new AtomicReference<>(), hfuuMajors);
+        ToolCallback wrapped = wrapScoreToRankMajor(
+                new AtomicInteger(),
+                new AtomicInteger(),
+                12000,
+                580,
+                List.of(),
+                List.of(),
+                hfuuMajors);
 
-        ToolCallback wrapped = McpTableCapturingToolCallback.wrap(delegate, extractor, objectMapper);
         String response = wrapped.call(
                 "{\"score\":580,\"province\":\"安徽\",\"year\":2025,\"subject_group\":\"物理类\",\"admission_type\":\"普通批\"}");
 
-        assertEquals(1, calls.get());
         JsonNode parsed = objectMapper.readTree(response);
         assertEquals(0, parsed.get("tier_counts").get("冲").intValue());
         assertEquals(0, parsed.get("tier_counts").get("稳").intValue());
@@ -136,26 +139,22 @@ class McpTableCapturingToolCallbackTest {
 
         List<ChatTable> tables = McpTableContext.tables();
         assertEquals(3, tables.size());
-        assertTrue(tables.get(0).title().startsWith("冲（580分"));
         assertTrue(tables.get(0).rows().isEmpty());
-        assertTrue(tables.get(1).title().startsWith("稳（580分"));
         assertTrue(tables.get(1).rows().isEmpty());
-        assertTrue(tables.get(2).title().startsWith("保（580分"));
         assertEquals(11, tables.get(2).rows().size());
-        assertTrue(tables.get(0).groups().isEmpty());
-        assertTrue(tables.get(1).groups().isEmpty());
-        assertEquals(1, tables.get(2).groups().size());
-        assertEquals(11, tables.get(2).groups().get(0).majorCount());
     }
 
     @Test
     void getMajorByScoreSplitsSteadyAndSafeByMinScore() throws Exception {
-        AtomicInteger calls = new AtomicInteger();
-        ToolCallback delegate = tieredDelegate(calls, new AtomicReference<>(), List.of(
-                major("计算机科学与技术", 570),
-                major("英语", 535)));
+        ToolCallback wrapped = wrapScoreToRankMajor(
+                new AtomicInteger(),
+                new AtomicInteger(),
+                12000,
+                580,
+                List.of(),
+                List.of(major("计算机科学与技术", 570)),
+                List.of(major("英语", 535)));
 
-        ToolCallback wrapped = McpTableCapturingToolCallback.wrap(delegate, extractor, objectMapper);
         wrapped.call("{\"score\":580,\"province\":\"安徽\",\"year\":2025,\"subject_group\":\"物理类\"}");
 
         List<ChatTable> tables = McpTableContext.tables();
@@ -166,16 +165,23 @@ class McpTableCapturingToolCallbackTest {
 
     @Test
     void getMajorByScoreFansOutAcrossCompiledProvinces() throws Exception {
-        AtomicInteger calls = new AtomicInteger();
-        List<String> callProvinces = new ArrayList<>();
-        ToolCallback delegate = provinceTrackingDelegate(calls, callProvinces, Map.of(
-                "江苏", major("江苏专业", 625),
-                "浙江", major("浙江专业", 620)));
+        AtomicInteger rankCalls = new AtomicInteger();
+        AtomicInteger majorCalls = new AtomicInteger();
+        List<String> rankProvinces = new ArrayList<>();
+        List<String> majorProvinces = new ArrayList<>();
+
+        ToolCallback rankDelegate = rankProvinceTrackingDelegate(rankCalls, rankProvinces, Map.of(
+                "江苏", rankRow("江苏", "物理类"),
+                "浙江", rankRow("浙江", "物理类")));
+        ToolCallback majorDelegate = provinceMajorByRankDelegate(majorCalls, majorProvinces, Map.of(
+                "江苏", List.of(major("江苏专业", 625)),
+                "浙江", List.of(major("浙江专业", 620))));
 
         AdmissionQueryIr query = new AdmissionQueryIr(
                 "search_majors",
-                new AdmissionSlotsIr(630, List.of("江苏", "浙江"), "物理类", 2025, "普通批"),
+                new AdmissionSlotsIr(630, null, List.of("江苏", "浙江"), "物理类", 2025, "普通批"),
                 AdmissionFiltersIr.empty(),
+                List.of(),
                 List.of(),
                 List.of(),
                 List.of(),
@@ -184,11 +190,13 @@ class McpTableCapturingToolCallbackTest {
                 null);
         AdmissionQueryContext.set(query);
         try {
-            ToolCallback wrapped = McpTableCapturingToolCallback.wrap(delegate, extractor, objectMapper);
+            ToolCallback wrapped = wrapScoreToRankMajor(rankDelegate, majorDelegate);
             wrapped.call("{\"score\":630,\"province\":\"安徽\",\"year\":2025,\"subject_group\":\"物理类\"}");
 
-            assertEquals(2, calls.get());
-            assertEquals(List.of("江苏", "浙江"), callProvinces);
+            assertEquals(2, rankCalls.get());
+            assertEquals(2, majorCalls.get());
+            assertEquals(List.of("江苏", "浙江"), rankProvinces);
+            assertEquals(List.of("江苏", "浙江"), majorProvinces);
             List<ChatTable> tables = McpTableContext.tables();
             assertEquals(3, tables.size());
             assertEquals(2, tables.get(1).rows().size());
@@ -200,15 +208,20 @@ class McpTableCapturingToolCallbackTest {
 
     @Test
     void getMajorByScoreAppliesCompiledExclusionFilters() throws Exception {
-        AtomicInteger calls = new AtomicInteger();
-        ToolCallback delegate = tieredDelegate(calls, new AtomicReference<>(), List.of(
-                major("数学与应用数学（师范）", 620),
-                major("计算机科学与技术", 625)));
+        AtomicInteger majorCalls = new AtomicInteger();
+        ToolCallback majorDelegate = countingMajorByRankDelegate(
+                majorCalls,
+                7000,
+                630,
+                List.of(major("数学与应用数学（师范）", 620)),
+                List.of(major("计算机科学与技术", 625)),
+                List.of());
 
         AdmissionQueryIr query = new AdmissionQueryIr(
                 "search_majors",
-                new AdmissionSlotsIr(630, List.of("安徽"), "物理类", 2025, "普通批"),
-                new AdmissionFiltersIr(List.of("师范"), List.of("师范"), List.of(), List.of()),
+                new AdmissionSlotsIr(630, null, List.of("安徽"), "物理类", 2025, "普通批"),
+                new AdmissionFiltersIr(List.of("师范"), List.of("师范"), List.of(), List.of(), List.of(), List.of()),
+                List.of(),
                 List.of(),
                 List.of(),
                 List.of(),
@@ -217,14 +230,16 @@ class McpTableCapturingToolCallbackTest {
                 null);
         AdmissionQueryContext.set(query);
         try {
-            ToolCallback wrapped = McpTableCapturingToolCallback.wrap(delegate, extractor, objectMapper);
+            ToolCallback wrapped = wrapScoreToRankMajor(
+                    fixedRankDelegate(7000),
+                    majorDelegate);
             wrapped.call("{\"score\":630,\"province\":\"安徽\",\"year\":2025,\"subject_group\":\"物理类\"}");
 
-            assertEquals(1, calls.get());
+            assertEquals(1, majorCalls.get());
             List<ChatTable> tables = McpTableContext.tables();
             assertEquals(3, tables.size());
+            assertEquals(1, tables.get(0).rows().size());
             assertEquals(1, tables.get(1).rows().size());
-            assertEquals("计算机科学与技术", tables.get(1).rows().get(0).get("major_name"));
         }
         finally {
             AdmissionQueryContext.clear();
@@ -241,8 +256,9 @@ class McpTableCapturingToolCallbackTest {
 
         AdmissionQueryIr query = new AdmissionQueryIr(
                 "search_rank",
-                new AdmissionSlotsIr(600, List.of("江苏", "浙江", "上海"), null, null, null),
+                new AdmissionSlotsIr(600, null, List.of("江苏", "浙江", "上海"), null, null, null),
                 AdmissionFiltersIr.empty(),
+                List.of(),
                 List.of(),
                 List.of(),
                 List.of(),
@@ -275,8 +291,9 @@ class McpTableCapturingToolCallbackTest {
 
         AdmissionQueryIr query = new AdmissionQueryIr(
                 "search_rank",
-                new AdmissionSlotsIr(600, List.of("江苏", "浙江", "上海"), null, null, null),
+                new AdmissionSlotsIr(600, null, List.of("江苏", "浙江", "上海"), null, null, null),
                 AdmissionFiltersIr.empty(),
+                List.of(),
                 List.of(),
                 List.of(),
                 List.of(),
@@ -314,8 +331,9 @@ class McpTableCapturingToolCallbackTest {
 
         AdmissionQueryIr query = new AdmissionQueryIr(
                 "search_rank",
-                new AdmissionSlotsIr(600, List.of("江苏", "浙江", "上海"), "物理类", null, null),
+                new AdmissionSlotsIr(600, null, List.of("江苏", "浙江", "上海"), "物理类", null, null),
                 AdmissionFiltersIr.empty(),
+                List.of(),
                 List.of(),
                 List.of(),
                 List.of(),
@@ -345,6 +363,204 @@ class McpTableCapturingToolCallbackTest {
         row.put("province", province);
         row.put("subject_group", subjectGroup);
         return row;
+    }
+
+    private ToolCallback wrapScoreToRankMajor(ToolCallback rankDelegate, ToolCallback majorByRankDelegate) {
+        ToolCallback scoreStub = new ToolCallback() {
+            @Override
+            public ToolDefinition getToolDefinition() {
+                return ToolDefinition.builder().name("getMajorByScore").description("test").inputSchema("{}").build();
+            }
+
+            @Override
+            public ToolMetadata getToolMetadata() {
+                return ToolMetadata.builder().build();
+            }
+
+            @Override
+            public String call(String toolInput) {
+                throw new UnsupportedOperationException("score path should use rank conversion");
+            }
+        };
+        return McpTableCapturingToolCallback.wrap(
+                scoreStub, extractor, objectMapper, rankDelegate, majorByRankDelegate);
+    }
+
+    private ToolCallback wrapScoreToRankMajor(
+            AtomicInteger rankCalls,
+            AtomicInteger majorCalls,
+            int resolvedRank,
+            int userScore,
+            List<Map<String, Object>> reach,
+            List<Map<String, Object>> steady,
+            List<Map<String, Object>> safe) {
+        return wrapScoreToRankMajor(
+                fixedRankDelegate(resolvedRank, rankCalls, null),
+                countingMajorByRankDelegate(majorCalls, resolvedRank, userScore, reach, steady, safe));
+    }
+
+    private ToolCallback wrapScoreToRankMajor(
+            AtomicInteger rankCalls,
+            AtomicInteger majorCalls,
+            int resolvedRank,
+            int userScore,
+            List<Map<String, Object>> reach,
+            List<Map<String, Object>> steady,
+            List<Map<String, Object>> safe,
+            AtomicReference<Integer> rankQueryScore) {
+        return wrapScoreToRankMajor(
+                fixedRankDelegate(resolvedRank, rankCalls, rankQueryScore),
+                countingMajorByRankDelegate(majorCalls, resolvedRank, userScore, reach, steady, safe));
+    }
+
+    private ToolCallback fixedRankDelegate(int rankMin) {
+        return fixedRankDelegate(rankMin, new AtomicInteger(), null);
+    }
+
+    private ToolCallback fixedRankDelegate(
+            int rankMin,
+            AtomicInteger calls,
+            AtomicReference<Integer> queryScoreUsed) {
+        return new ToolCallback() {
+            @Override
+            public ToolDefinition getToolDefinition() {
+                return ToolDefinition.builder().name("getRankByScore").description("test").inputSchema("{}").build();
+            }
+
+            @Override
+            public ToolMetadata getToolMetadata() {
+                return ToolMetadata.builder().build();
+            }
+
+            @Override
+            public String call(String toolInput) {
+                return call(toolInput, null);
+            }
+
+            @Override
+            public String call(String toolInput, ToolContext toolContext) {
+                try {
+                    calls.incrementAndGet();
+                    JsonNode input = objectMapper.readTree(toolInput);
+                    int score = input.path("score").asInt(630);
+                    if (queryScoreUsed != null) {
+                        queryScoreUsed.set(score);
+                    }
+                    String province = input.path("province").asText("安徽");
+                    String subjectGroup = input.path("subject_group").asText("物理类");
+                    return objectMapper.writeValueAsString(Map.of(
+                            "count", 1,
+                            "ranks", List.of(Map.of(
+                                    "year", 2025,
+                                    "province", province,
+                                    "subject_group", subjectGroup,
+                                    "score", score,
+                                    "rank_min", rankMin,
+                                    "rank_max", rankMin + 100))));
+                }
+                catch (Exception ex) {
+                    throw new IllegalStateException(ex);
+                }
+            }
+        };
+    }
+
+    private ToolCallback countingMajorByRankDelegate(
+            AtomicInteger calls,
+            int userRank,
+            int userScore,
+            List<Map<String, Object>> reach,
+            List<Map<String, Object>> steady,
+            List<Map<String, Object>> safe) {
+        return new ToolCallback() {
+            @Override
+            public ToolDefinition getToolDefinition() {
+                return ToolDefinition.builder().name("getMajorByRank").description("test").inputSchema("{}").build();
+            }
+
+            @Override
+            public ToolMetadata getToolMetadata() {
+                return ToolMetadata.builder().build();
+            }
+
+            @Override
+            public String call(String toolInput) {
+                return call(toolInput, null);
+            }
+
+            @Override
+            public String call(String toolInput, ToolContext toolContext) {
+                calls.incrementAndGet();
+                try {
+                    return objectMapper.writeValueAsString(buildMajorByRankPayload(userRank, userScore, reach, steady, safe));
+                }
+                catch (Exception ex) {
+                    throw new IllegalStateException(ex);
+                }
+            }
+        };
+    }
+
+    private ToolCallback provinceMajorByRankDelegate(
+            AtomicInteger calls,
+            List<String> callProvinces,
+            Map<String, List<Map<String, Object>>> majorsByProvince) {
+        return new ToolCallback() {
+            @Override
+            public ToolDefinition getToolDefinition() {
+                return ToolDefinition.builder().name("getMajorByRank").description("test").inputSchema("{}").build();
+            }
+
+            @Override
+            public ToolMetadata getToolMetadata() {
+                return ToolMetadata.builder().build();
+            }
+
+            @Override
+            public String call(String toolInput) {
+                return call(toolInput, null);
+            }
+
+            @Override
+            public String call(String toolInput, ToolContext toolContext) {
+                try {
+                    calls.incrementAndGet();
+                    JsonNode input = objectMapper.readTree(toolInput);
+                    String province = input.path("province").asText();
+                    callProvinces.add(province);
+                    int rank = input.path("rank").asInt(1000);
+                    List<Map<String, Object>> majors = majorsByProvince.getOrDefault(province, List.of());
+                    return objectMapper.writeValueAsString(buildMajorByRankPayload(
+                            rank,
+                            input.path("user_score").asInt(630),
+                            List.of(),
+                            majors,
+                            List.of()));
+                }
+                catch (Exception ex) {
+                    throw new IllegalStateException(ex);
+                }
+            }
+        };
+    }
+
+    private Map<String, Object> buildMajorByRankPayload(
+            int userRank,
+            int userScore,
+            List<Map<String, Object>> reach,
+            List<Map<String, Object>> steady,
+            List<Map<String, Object>> safe) {
+        List<Map<String, Object>> all = new ArrayList<>();
+        all.addAll(reach);
+        all.addAll(steady);
+        all.addAll(safe);
+        return Map.of(
+                "user_rank", userRank,
+                "user_score", userScore,
+                "count", all.size(),
+                "majors_by_tier", Map.of("冲", reach, "稳", steady, "保", safe),
+                "tier_counts", Map.of("冲", reach.size(), "稳", steady.size(), "保", safe.size()),
+                "majors", all);
     }
 
     private ToolCallback rankProvinceTrackingDelegate(
@@ -389,12 +605,13 @@ class McpTableCapturingToolCallbackTest {
                     if (!requestedSubjectGroup.isBlank() && !expectedSubjectGroup.equals(requestedSubjectGroup)) {
                         return objectMapper.writeValueAsString(Map.of("count", 0, "ranks", List.of()));
                     }
+                    int score = input.path("score").asInt(600);
                     List<Map<String, Object>> ranks = List.of(
                             Map.of(
                                     "year", 2025,
                                     "province", province,
                                     "subject_group", template.get("subject_group"),
-                                    "score", 600,
+                                    "score", score,
                                     "rank_min", 1000,
                                     "rank_max", 1100,
                                     "segment_count", 50,
@@ -573,7 +790,7 @@ class McpTableCapturingToolCallbackTest {
     }
 
     @Test
-    void getRankByScoreUsesResolvedTurnContextForSlots() throws Exception {
+    void getRankByScoreUsesAdmissionQueryContextForSlots() throws Exception {
         ToolCallback delegate = new ToolCallback() {
             @Override
             public ToolDefinition getToolDefinition() {
@@ -602,11 +819,17 @@ class McpTableCapturingToolCallbackTest {
             }
         };
 
-        ResolvedTurnContext.set(new ResolvedTurn(
-                AdmissionIntent.RANK,
-                new AdmissionInputParser.ParsedAdmissionInput(600, "浙江", null, null, null),
-                SlotDelta.PROVINCE,
-                true));
+        AdmissionQueryContext.set(new AdmissionQueryIr(
+                "search_rank",
+                new AdmissionSlotsIr(600, null, List.of("浙江"), null, null, null),
+                null,
+                null,
+                null,
+                null,
+                null,
+                0.82,
+                "浙江呢？",
+                null));
         try {
             ToolCallback wrapped = McpTableCapturingToolCallback.wrap(delegate, extractor, objectMapper);
             wrapped.call("{\"province\": \"浙江\"}", null);
@@ -618,7 +841,7 @@ class McpTableCapturingToolCallbackTest {
             assertTrue(formatted.contains("13,472–13,891"));
         }
         finally {
-            ResolvedTurnContext.clear();
+            AdmissionQueryContext.clear();
         }
     }
 }

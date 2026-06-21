@@ -2,16 +2,12 @@ package com.example.javaagentmvp.admissionworkflow.compiler;
 
 import com.example.javaagentmvp.admissionworkflow.intent.AdmissionInputParser;
 import com.example.javaagentmvp.admissionworkflow.intent.AdmissionIntent;
-import com.example.javaagentmvp.admissionworkflow.intent.AdmissionIntentClassifier;
 import com.example.javaagentmvp.admissionworkflow.intent.AdmissionRankQuery;
-import com.example.javaagentmvp.admissionworkflow.intent.ConversationTurnResolver;
-import com.example.javaagentmvp.admissionworkflow.intent.ResolvedTurn;
+import com.example.javaagentmvp.rag.RagQueryRouter;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.regex.Pattern;
 
 @Component
@@ -23,20 +19,17 @@ public class LocalAdmissionQueryCompiler {
             "专业|报什么|什么专业|哪些专业|可报|能上什么|报考|报志愿|志愿|什么学校|哪些学校|院校");
     private static final Pattern UNIVERSITY_HINT = Pattern.compile("大学");
 
-    private final AdmissionIntentClassifier intentClassifier;
     private final AdmissionOntologyRegistry ontologyRegistry;
-    private final ConversationTurnResolver turnResolver;
     private final AdmissionPriorSlotsBuilder priorSlotsBuilder;
+    private final RagQueryRouter ragQueryRouter;
 
     public LocalAdmissionQueryCompiler(
-            AdmissionIntentClassifier intentClassifier,
             AdmissionOntologyRegistry ontologyRegistry,
-            ConversationTurnResolver turnResolver,
-            AdmissionPriorSlotsBuilder priorSlotsBuilder) {
-        this.intentClassifier = intentClassifier;
+            AdmissionPriorSlotsBuilder priorSlotsBuilder,
+            RagQueryRouter ragQueryRouter) {
         this.ontologyRegistry = ontologyRegistry;
-        this.turnResolver = turnResolver;
         this.priorSlotsBuilder = priorSlotsBuilder;
+        this.ragQueryRouter = ragQueryRouter;
     }
 
     public AdmissionQueryIr compile(String message) {
@@ -49,36 +42,73 @@ public class LocalAdmissionQueryCompiler {
             return current;
         }
 
+        String rawMessage = current.rawMessage();
+
         AdmissionSlotsIr priorSlots = priorSlotsBuilder.build(priorUserMessagesNewestFirst);
         AdmissionSlotsIr mergedSlots = geographySpecifiedOnCurrentTurn(current)
                 ? current.slots().mergedWith(priorSlots.withoutProvinces())
                 : current.slots().mergedWith(priorSlots);
 
+        AdmissionInputParser.ParsedAdmissionInput currentParsed = AdmissionInputParser.parse(rawMessage);
+        AdmissionIntent explicitIntent = MultiturnIntentSupport.classifyExplicitIntent(rawMessage);
+        AdmissionIntent priorIntent = MultiturnIntentSupport.resolvePriorSearchIntent(
+                priorUserMessagesNewestFirst, priorSlots);
+
         String task = current.task();
-        if ("unknown".equals(task)) {
-            ResolvedTurn priorTurn = turnResolver.resolve(
-                    message,
-                    priorUserMessagesNewestFirst,
-                    List.of());
-            if (priorTurn.intent() != AdmissionIntent.UNKNOWN) {
-                task = toTask(priorTurn.intent(), message, mergedSlots.score());
-            }
-            else if (mergedSlots.score() != null) {
-                task = "search_majors";
-            }
+        boolean inheritedFromPrior = false;
+        boolean usePriorSlots = false;
+        if (explicitIntent == AdmissionIntent.POLICY || explicitIntent == AdmissionIntent.REPORT) {
+            task = toTask(explicitIntent, rawMessage, mergedSlots.score());
+        }
+        else if (explicitIntent != AdmissionIntent.UNKNOWN) {
+            task = toTask(explicitIntent, rawMessage, mergedSlots.score());
+            usePriorSlots = true;
+        }
+        else if ((priorIntent == AdmissionIntent.RANK || priorIntent == AdmissionIntent.SCORE)
+                && (MultiturnIntentSupport.canInheritAsFollowUp(rawMessage, currentParsed)
+                || geographySpecifiedOnCurrentTurn(current)
+                || MultiturnIntentSupport.hasAdmissionRefinement(current))) {
+            task = toTask(priorIntent, rawMessage, mergedSlots.score());
+            inheritedFromPrior = true;
+            usePriorSlots = true;
+        }
+        else {
+            task = current.task();
         }
 
-        List<String> needs = computeNeedsClarification(task, mergedSlots);
+        AdmissionSlotsIr effectiveSlots = usePriorSlots ? mergedSlots : current.slots();
+
+        AdmissionOntologyRegistry.MajorCategoryMatch majorCategory =
+                ontologyRegistry.matchMajorCategoryFilters(rawMessage);
+        List<String> needs = computeNeedsClarification(rawMessage, task, effectiveSlots, majorCategory);
+        needs = finalizeUnknownTurn(
+                rawMessage,
+                currentParsed,
+                current,
+                task,
+                effectiveSlots,
+                majorCategory,
+                needs);
+        task = resolveTaskAfterUnknownPromotion(rawMessage, task, currentParsed, current);
+        List<UnsupportedConstraintIr> unsupported = ontologyRegistry.matchUnsupportedConstraints(rawMessage);
+        AdmissionParseTraceIr parseTrace = current.parseTrace() == null
+                ? new AdmissionParseTraceIr(List.of("local_compiler"), List.of(), false, inheritedFromPrior)
+                : new AdmissionParseTraceIr(
+                        current.parseTrace().rulesApplied(),
+                        current.parseTrace().ontologyHits(),
+                        current.parseTrace().llmUsed(),
+                        inheritedFromPrior);
         return new AdmissionQueryIr(
                 task,
-                mergedSlots,
+                effectiveSlots,
                 current.filters(),
                 current.preferences(),
                 current.regions(),
+                unsupported,
                 needs,
                 current.confidence(),
                 current.rawMessage(),
-                current.parseTrace());
+                parseTrace);
     }
 
     private AdmissionQueryIr compileSingle(String message) {
@@ -88,12 +118,19 @@ public class LocalAdmissionQueryCompiler {
         }
 
         AdmissionInputParser.ParsedAdmissionInput parsed = AdmissionInputParser.parse(normalized);
-        AdmissionIntent intent = intentClassifier.classify(normalized);
-        String task = toTask(intent, normalized, parsed.score());
+        AdmissionIntent explicitIntent = MultiturnIntentSupport.classifyExplicitIntent(normalized);
+        String task = refineTaskFromRouter(toTask(explicitIntent, normalized, parsed.score()), normalized);
 
         List<AdmissionRegionIr> regions = ontologyRegistry.matchRegions(normalized);
-        AdmissionFiltersIr exclusionFilters = ontologyRegistry.matchExclusions(normalized);
+        AdmissionOntologyRegistry.MajorCategoryMatch majorCategory =
+                ontologyRegistry.matchMajorCategoryFilters(normalized);
+        AdmissionFiltersIr filters = withMajorCategoryFilters(
+                withIncludeMajors(
+                        ontologyRegistry.matchExclusions(normalized),
+                        AdmissionInputParser.parseIncludeMajorKeywords(normalized)),
+                majorCategory);
         List<AdmissionPreferenceIr> preferences = ontologyRegistry.matchPreferences(normalized);
+        List<UnsupportedConstraintIr> unsupported = ontologyRegistry.matchUnsupportedConstraints(normalized);
 
         List<String> provinces = new ArrayList<>();
         if (parsed.province() != null) {
@@ -109,6 +146,7 @@ public class LocalAdmissionQueryCompiler {
 
         AdmissionSlotsIr slots = new AdmissionSlotsIr(
                 parsed.score(),
+                parsed.rank(),
                 provinces,
                 parsed.subjectGroup(),
                 parsed.year(),
@@ -117,19 +155,87 @@ public class LocalAdmissionQueryCompiler {
         List<String> ontologyHits = new ArrayList<>();
         regions.forEach(region -> ontologyHits.add(region.phrase()));
         preferences.forEach(pref -> ontologyHits.add(pref.rawPhrase()));
+        majorCategory.matchedPhrases().forEach(ontologyHits::add);
+        unsupported.forEach(constraint -> ontologyHits.add(constraint.rawPhrase()));
 
-        AdmissionQueryIr query = new AdmissionQueryIr(
+        List<String> needs = computeNeedsClarification(normalized, task, slots, majorCategory);
+        AdmissionQueryIr currentTurn = new AdmissionQueryIr(
                 task,
                 slots,
-                exclusionFilters,
+                filters,
                 preferences,
                 regions,
-                computeNeedsClarification(task, slots),
-                estimateConfidence(task, slots, regions, exclusionFilters, preferences),
+                unsupported,
+                needs,
+                0.0,
                 normalized,
                 new AdmissionParseTraceIr(List.of("local_compiler"), ontologyHits, false));
+        needs = finalizeUnknownTurn(normalized, parsed, currentTurn, task, slots, majorCategory, needs);
+        task = resolveTaskAfterUnknownPromotion(normalized, task, parsed, currentTurn);
+        return new AdmissionQueryIr(
+                task,
+                slots,
+                filters,
+                preferences,
+                regions,
+                unsupported,
+                needs,
+                estimateConfidence(task, slots, regions, filters, preferences),
+                normalized,
+                currentTurn.parseTrace());
+    }
 
-        return query;
+    private static List<String> finalizeUnknownTurn(
+            String rawMessage,
+            AdmissionInputParser.ParsedAdmissionInput parsed,
+            AdmissionQueryIr currentTurn,
+            String task,
+            AdmissionSlotsIr slots,
+            AdmissionOntologyRegistry.MajorCategoryMatch majorCategory,
+            List<String> needs) {
+        if (!"unknown".equals(task)) {
+            return needs;
+        }
+        if (!MultiturnIntentSupport.isCurrentTurnAdmissionRelated(rawMessage, parsed, currentTurn)) {
+            return needs;
+        }
+        String promoted = AdmissionRankQuery.isRankQuery(rawMessage) ? "search_rank" : "search_majors";
+        return computeNeedsClarification(rawMessage, promoted, slots, majorCategory);
+    }
+
+    private static String resolveTaskAfterUnknownPromotion(
+            String rawMessage,
+            String task,
+            AdmissionInputParser.ParsedAdmissionInput parsed,
+            AdmissionQueryIr currentTurn) {
+        if (!"unknown".equals(task)) {
+            return task;
+        }
+        if (!MultiturnIntentSupport.isCurrentTurnAdmissionRelated(rawMessage, parsed, currentTurn)) {
+            return task;
+        }
+        if (AdmissionRankQuery.isRankQuery(rawMessage)) {
+            return "search_rank";
+        }
+        return "search_majors";
+    }
+
+    private String refineTaskFromRouter(String task, String message) {
+        if (!"unknown".equals(task)) {
+            return task;
+        }
+        RagQueryRouter.Decision decision = ragQueryRouter.decide(message);
+        if (decision.useRag()) {
+            return "policy_qa";
+        }
+        String reason = decision.reason();
+        if (reason != null && reason.contains("getRankByScore")) {
+            return "search_rank";
+        }
+        if (reason != null && reason.contains("getMajorByScore")) {
+            return "search_majors";
+        }
+        return task;
     }
 
     private static boolean geographySpecifiedOnCurrentTurn(AdmissionQueryIr current) {
@@ -170,21 +276,55 @@ public class LocalAdmissionQueryCompiler {
         return "unknown";
     }
 
-    private static List<String> computeNeedsClarification(String task, AdmissionSlotsIr slots) {
+    private static AdmissionFiltersIr withIncludeMajors(AdmissionFiltersIr filters, List<String> includeMajors) {
+        if (includeMajors == null || includeMajors.isEmpty()) {
+            return filters;
+        }
+        return new AdmissionFiltersIr(
+                filters.excludeSchoolNameContains(),
+                filters.excludeMajorKeywords(),
+                includeMajors,
+                filters.includeSchools(),
+                filters.includeMajorDisciplineGroups(),
+                filters.includeDisciplineCategories());
+    }
+
+    private static AdmissionFiltersIr withMajorCategoryFilters(
+            AdmissionFiltersIr filters,
+            AdmissionOntologyRegistry.MajorCategoryMatch majorCategory) {
+        if (majorCategory == null
+                || (majorCategory.disciplineGroups().isEmpty() && majorCategory.disciplineCategories().isEmpty())) {
+            return filters;
+        }
+        return new AdmissionFiltersIr(
+                filters.excludeSchoolNameContains(),
+                filters.excludeMajorKeywords(),
+                filters.includeMajorKeywords(),
+                filters.includeSchools(),
+                majorCategory.disciplineGroups(),
+                majorCategory.disciplineCategories());
+    }
+
+    private static List<String> computeNeedsClarification(
+            String message,
+            String task,
+            AdmissionSlotsIr slots,
+            AdmissionOntologyRegistry.MajorCategoryMatch majorCategory) {
         List<String> needs = new ArrayList<>();
-        if ("search_majors".equals(task) || "report".equals(task)) {
-            if (slots.score() == null) {
+        if ("search_majors".equals(task) || "report".equals(task) || "search_rank".equals(task)) {
+            if (!slots.hasScoreOrRank()) {
                 needs.add("score");
             }
-            if (slots.provincesOrEmpty().isEmpty()) {
+            if (!"search_rank".equals(task) && slots.provincesOrEmpty().isEmpty()) {
                 needs.add("provinces");
             }
-            if (slots.subjectGroup() == null || slots.subjectGroup().isBlank()) {
+            if (!"search_rank".equals(task)
+                    && (slots.subjectGroup() == null || slots.subjectGroup().isBlank())) {
                 needs.add("subject_group");
             }
-        }
-        else if ("search_rank".equals(task) && slots.score() == null) {
-            needs.add("score");
+            if (MajorCategoryClarificationSupport.needsMajorCategoryClarification(message, majorCategory)) {
+                needs.add(MajorCategoryClarificationSupport.FIELD);
+            }
         }
         return needs;
     }
@@ -205,10 +345,13 @@ public class LocalAdmissionQueryCompiler {
         if (!filters.excludeSchoolNameContains().isEmpty() || !filters.excludeMajorKeywords().isEmpty()) {
             confidence += 0.06;
         }
+        if (filters.hasMajorCategoryFilter()) {
+            confidence += 0.05;
+        }
         if (!preferences.isEmpty()) {
             confidence += 0.04;
         }
-        if (slots.score() != null) {
+        if (slots.score() != null || slots.rank() != null) {
             confidence += 0.05;
         }
         if (!slots.provincesOrEmpty().isEmpty()) {

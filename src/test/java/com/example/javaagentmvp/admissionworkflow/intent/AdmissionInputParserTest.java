@@ -9,6 +9,23 @@ import static org.assertj.core.api.Assertions.assertThat;
 class AdmissionInputParserTest {
 
     @Test
+    void parsesRankProvinceAndSubjectForMajorSearch() {
+        AdmissionInputParser.ParsedAdmissionInput parsed =
+                AdmissionInputParser.parse("排名10000名 安徽 物理类 能报什么专业");
+
+        assertThat(parsed.rank()).isEqualTo(10000);
+        assertThat(parsed.score()).isNull();
+        assertThat(parsed.province()).isEqualTo("安徽");
+        assertThat(parsed.subjectGroup()).isEqualTo("物理类");
+    }
+
+    @Test
+    void parseRank() {
+        assertThat(AdmissionInputParser.parseRank("位次3286")).contains(3286);
+        assertThat(AdmissionInputParser.parseRank("第5000名")).contains(5000);
+    }
+
+    @Test
     void parsesScoreProvinceAndSubject() {
         AdmissionInputParser.ParsedAdmissionInput parsed =
                 AdmissionInputParser.parse("安徽物理类620分能上什么专业");

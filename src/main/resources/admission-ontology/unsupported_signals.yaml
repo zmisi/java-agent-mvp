@@ -1,0 +1,93 @@
+# Constraint phrases we recognize but cannot execute yet (no MCP/RAG filter data).
+# Used for IR unsupported_constraints + product demand analytics.
+# label: user-facing name in acknowledgement messages.
+unsupported_signals:
+  # --- 升学就业薪资（无结构化数据）---
+  保研率:
+    constraint_type: postgraduate_recommendation_rate
+    reason: no_postgrad_rate_data
+    label: 保研率/推免率
+    aliases: [保研, 推免率, 推免比例, 保研比例, 保研情况]
+  就业:
+    constraint_type: employment_data
+    reason: no_employment_data
+    label: 就业数据/就业率
+    aliases: [就业数据, 就业率, 就业去向, 就业前景, 就业前景好, 就业前景比较好, 好就业, 就业好, 就业怎么样, 毕业去向, 就业率高, 就业率高的]
+  薪资:
+    constraint_type: salary_data
+    reason: no_salary_data
+    label: 薪资/收入
+    aliases: [收入, 收入高, 收入比较高, 工资, 工资高, 薪酬, 薪水, 待遇, 待遇好, 薪资如何, 收入如何, 毕业薪资]
+  央国企:
+    constraint_type: state_owned_employability
+    reason: no_employer_type_data
+    label: 央国企就业
+    aliases: [进央国企, 能进央国企, 国企, 央企, 体制内, 铁饭碗, 进国企, 进央企]
+
+  # --- 院校排名（非高考位次）---
+  QS排名:
+    constraint_type: university_ranking
+    reason: no_university_ranking_data
+    label: 大学/QS排名
+    aliases: [QS, QS榜, 世界大学排名, 泰晤士排名, 泰晤士, USNews, US News, 软科排名, 软科, 大学排行榜, 高校排名, 院校排名, 全国大学排名, 世界排名]
+  学科评估:
+    constraint_type: discipline_assessment
+    reason: no_discipline_assessment_data
+    label: 学科评估/学科排名
+    aliases: [学科排名, 第四轮学科评估, 第五轮学科评估, A类学科, 一流学科]
+
+  # --- 院校属性（无标签数据）---
+  学费:
+    constraint_type: tuition
+    reason: no_tuition_data
+    label: 学费/收费
+    aliases: [学费便宜, 学费低的, 收费低, 便宜点, 别太贵, 学费多少, 学费高]
+  公办:
+    constraint_type: school_nature_public
+    reason: no_school_nature_data
+    label: 公办/民办性质
+    aliases: [公办学校, 公立学校, 公办高校, 公办院校, 公立]
+  民办:
+    constraint_type: school_nature_private
+    reason: no_school_nature_data
+    label: 公办/民办性质
+    aliases: [民办学校, 私立, 民办高校]
+  985:
+    constraint_type: tier_985
+    reason: no_tier_label_data
+    label: 985/211/双一流层次
+    aliases: [985高校, 985院校, 985大学]
+  211:
+    constraint_type: tier_211
+    reason: no_tier_label_data
+    label: 985/211/双一流层次
+    aliases: [211高校, 211院校, 211大学]
+  双一流:
+    constraint_type: double_first_class
+    reason: no_tier_label_data
+    label: 985/211/双一流层次
+    aliases: [双一流高校, 一流大学]
+
+  # --- 地理（省级以下）---
+  城市:
+    constraint_type: city
+    reason: no_city_filter_data
+    label: 城市/地级市
+    aliases: [在苏州, 在南京, 在杭州, 杭州的高校, 上海市区, 地级市, 在哪个城市, 市区]
+
+  # --- 校园生活与其它 ---
+  宿舍:
+    constraint_type: campus_life
+    reason: no_campus_life_data
+    label: 宿舍/住宿
+    aliases: [住宿, 住宿条件, 寝室, 几人间]
+  奖学金:
+    constraint_type: scholarship
+    reason: no_scholarship_data
+    label: 奖学金
+    aliases: [奖助学金, 助学金]
+  转专业:
+    constraint_type: transfer_major
+    reason: no_transfer_major_data
+    label: 转专业政策/比例
+    aliases: [转专业率, 能不能转专业, 好转专业]

@@ -115,6 +115,11 @@ public final class RankResponseFormatter {
         }
 
         int queryScore = resolveScore(score, ranks);
+        List<String> provincesInData = distinctProvinces(ranks);
+        if (provincesInData.size() > 1) {
+            return formatGroupedByProvince(ranks, queryScore, provincesInData);
+        }
+
         String queryProvince = resolveProvince(province, ranks);
 
         StringBuilder out = new StringBuilder();
@@ -159,6 +164,59 @@ public final class RankResponseFormatter {
 
         out.append("</tbody></table></div></section>");
         return out.toString().strip();
+    }
+
+    private static String formatGroupedByProvince(JsonNode ranks, int queryScore, List<String> provinces) {
+        StringBuilder out = new StringBuilder();
+        out.append(formatIntroText(queryScore, provinces)).append("\n\n");
+        for (String province : provinces) {
+            List<JsonNode> rows = new ArrayList<>();
+            for (JsonNode row : ranks) {
+                if (province.equals(row.path("province").asText("").strip())) {
+                    rows.add(row);
+                }
+            }
+            if (rows.isEmpty()) {
+                continue;
+            }
+            out.append("<section class=\"rank-table-block\">");
+            out.append("<div class=\"rank-table-header\">")
+                    .append(escapeHtml(province))
+                    .append("</div>");
+            out.append("<div class=\"rank-result-wrap\"><table class=\"rank-result-table\">");
+            out.append("<thead><tr>");
+            appendHeaderCell(out, "年份");
+            appendHeaderCell(out, "科类");
+            appendHeaderCell(out, "位次区间");
+            appendHeaderCell(out, "同分数段人数");
+            appendHeaderCell(out, "数据来源");
+            out.append("</tr></thead><tbody>");
+            rows.sort(Comparator
+                    .comparingInt((JsonNode r) -> r.path("year").asInt(0)).reversed()
+                    .thenComparing(r -> r.path("subject_group").asText("")));
+            for (JsonNode row : rows) {
+                out.append("<tr>");
+                appendDataCell(out, formatYearLabel(row, queryScore), true);
+                appendDataCell(out, escapeHtml(row.path("subject_group").asText("")), false);
+                appendDataCell(out, formatRankRange(row), true);
+                appendDataCell(out, formatSegmentCount(row), true);
+                appendDataCell(out, formatSourceHtml(row), false);
+                out.append("</tr>");
+            }
+            out.append("</tbody></table></div></section>\n\n");
+        }
+        return out.toString().strip();
+    }
+
+    private static List<String> distinctProvinces(JsonNode ranks) {
+        List<String> provinces = new ArrayList<>();
+        for (JsonNode row : ranks) {
+            String province = row.path("province").asText("").strip();
+            if (!province.isBlank() && !provinces.contains(province)) {
+                provinces.add(province);
+            }
+        }
+        return provinces;
     }
 
     private static void appendHeaderCell(StringBuilder out, String label) {

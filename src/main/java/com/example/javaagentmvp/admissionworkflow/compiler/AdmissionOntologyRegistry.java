@@ -21,8 +21,27 @@ public class AdmissionOntologyRegistry {
     private Map<String, List<String>> regions = Map.of();
     private Map<String, Map<String, List<String>>> exclusions = Map.of();
     private List<PreferencePhrase> preferencePhrases = List.of();
+    private List<UnsupportedSignalPhrase> unsupportedSignalPhrases = List.of();
+    private List<MajorCategoryPhrase> majorCategoryPhrases = List.of();
 
     record PreferencePhrase(String phrase, String dimension) {
+    }
+
+    record UnsupportedSignalPhrase(String phrase, String constraintType, String reason, String label) {
+    }
+
+    record MajorCategoryPhrase(
+            String phrase,
+            String key,
+            List<String> disciplineGroups,
+            List<String> disciplineCategories,
+            String label) {
+    }
+
+    public record MajorCategoryMatch(
+            List<String> disciplineGroups,
+            List<String> disciplineCategories,
+            List<String> matchedPhrases) {
     }
 
     @PostConstruct
@@ -30,6 +49,8 @@ public class AdmissionOntologyRegistry {
         regions = loadRegions();
         exclusions = loadExclusions();
         preferencePhrases = loadPreferencePhrases();
+        unsupportedSignalPhrases = loadUnsupportedSignalPhrases();
+        majorCategoryPhrases = loadMajorCategoryPhrases();
     }
 
     public List<AdmissionRegionIr> matchRegions(String message) {
@@ -55,7 +76,7 @@ public class AdmissionOntologyRegistry {
             mergeUnique(excludeSchools, entry.getValue().get("exclude_school_name_contains"));
             mergeUnique(excludeMajors, entry.getValue().get("exclude_major_keywords"));
         }
-        return new AdmissionFiltersIr(excludeSchools, excludeMajors, List.of(), List.of());
+        return new AdmissionFiltersIr(excludeSchools, excludeMajors, List.of(), List.of(), List.of(), List.of());
     }
 
     public List<AdmissionPreferenceIr> matchPreferences(String message) {
@@ -74,6 +95,44 @@ public class AdmissionOntologyRegistry {
                     .toList();
         }
         return preferences;
+    }
+
+    public List<UnsupportedConstraintIr> matchUnsupportedConstraints(String message) {
+        if (message == null || message.isBlank()) {
+            return List.of();
+        }
+        List<UnsupportedConstraintIr> matched = new ArrayList<>();
+        Set<String> seenTypes = new LinkedHashSet<>();
+        for (UnsupportedSignalPhrase candidate : unsupportedSignalPhrases) {
+            if (!message.contains(candidate.phrase()) || !seenTypes.add(candidate.constraintType())) {
+                continue;
+            }
+            matched.add(new UnsupportedConstraintIr(
+                    candidate.phrase(),
+                    candidate.constraintType(),
+                    candidate.reason(),
+                    candidate.label()));
+        }
+        return List.copyOf(matched);
+    }
+
+    public MajorCategoryMatch matchMajorCategoryFilters(String message) {
+        if (message == null || message.isBlank()) {
+            return new MajorCategoryMatch(List.of(), List.of(), List.of());
+        }
+        List<String> groups = new ArrayList<>();
+        List<String> categories = new ArrayList<>();
+        List<String> matchedPhrases = new ArrayList<>();
+        Set<String> seenKeys = new LinkedHashSet<>();
+        for (MajorCategoryPhrase candidate : majorCategoryPhrases) {
+            if (!message.contains(candidate.phrase()) || !seenKeys.add(candidate.key())) {
+                continue;
+            }
+            matchedPhrases.add(candidate.phrase());
+            mergeUnique(groups, candidate.disciplineGroups());
+            mergeUnique(categories, candidate.disciplineCategories());
+        }
+        return new MajorCategoryMatch(List.copyOf(groups), List.copyOf(categories), List.copyOf(matchedPhrases));
     }
 
     private List<Map.Entry<String, Map<String, List<String>>>> sortedExclusions() {
@@ -149,6 +208,76 @@ public class AdmissionOntologyRegistry {
         return loaded.stream()
                 .sorted(Comparator.comparingInt(phrase -> -phrase.phrase().length()))
                 .toList();
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<UnsupportedSignalPhrase> loadUnsupportedSignalPhrases() throws IOException {
+        Map<String, Object> root = loadYaml("admission-ontology/unsupported_signals.yaml");
+        List<UnsupportedSignalPhrase> loaded = new ArrayList<>();
+        Object signalsNode = root.get("unsupported_signals");
+        if (signalsNode instanceof Map<?, ?> signalsMap) {
+            signalsMap.forEach((phrase, body) -> {
+                if (body instanceof Map<?, ?> bodyMap) {
+                    String constraintType = String.valueOf(bodyMap.get("constraint_type"));
+                    Object reasonObj = bodyMap.get("reason");
+                    String reason = reasonObj == null ? "no_data" : String.valueOf(reasonObj);
+                    Object labelObj = bodyMap.get("label");
+                    String label = labelObj == null ? String.valueOf(phrase) : String.valueOf(labelObj);
+                    loaded.add(new UnsupportedSignalPhrase(String.valueOf(phrase), constraintType, reason, label));
+                    Object aliases = bodyMap.get("aliases");
+                    if (aliases instanceof List<?> aliasList) {
+                        aliasList.forEach(alias -> loaded.add(
+                                new UnsupportedSignalPhrase(
+                                        String.valueOf(alias),
+                                        constraintType,
+                                        reason,
+                                        label)));
+                    }
+                }
+            });
+        }
+        return loaded.stream()
+                .sorted(Comparator.comparingInt(phrase -> -phrase.phrase().length()))
+                .toList();
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<MajorCategoryPhrase> loadMajorCategoryPhrases() throws IOException {
+        Map<String, Object> root = loadYaml("admission-ontology/major_category_filters.yaml");
+        List<MajorCategoryPhrase> loaded = new ArrayList<>();
+        Object filtersNode = root.get("major_category_filters");
+        if (filtersNode instanceof Map<?, ?> filtersMap) {
+            filtersMap.forEach((key, body) -> {
+                if (!(body instanceof Map<?, ?> bodyMap)) {
+                    return;
+                }
+                String filterKey = String.valueOf(key);
+                List<String> groups = readStringList(bodyMap.get("discipline_groups"));
+                List<String> categories = readStringList(bodyMap.get("discipline_categories"));
+                Object labelObj = bodyMap.get("label");
+                String label = labelObj == null ? filterKey : String.valueOf(labelObj);
+                loaded.add(new MajorCategoryPhrase(filterKey, filterKey, groups, categories, label));
+                Object aliases = bodyMap.get("aliases");
+                if (aliases instanceof List<?> aliasList) {
+                    aliasList.forEach(alias -> loaded.add(new MajorCategoryPhrase(
+                            String.valueOf(alias),
+                            filterKey,
+                            groups,
+                            categories,
+                            label)));
+                }
+            });
+        }
+        return loaded.stream()
+                .sorted(Comparator.comparingInt(phrase -> -phrase.phrase().length()))
+                .toList();
+    }
+
+    private static List<String> readStringList(Object node) {
+        if (!(node instanceof List<?> list)) {
+            return List.of();
+        }
+        return list.stream().map(String::valueOf).toList();
     }
 
     private static Map<String, Object> loadYaml(String path) throws IOException {

@@ -1,10 +1,10 @@
 package com.example.javaagentmvp.rag;
 
-import com.example.javaagentmvp.admissionworkflow.intent.AdmissionInputParser;
-import com.example.javaagentmvp.admissionworkflow.intent.AdmissionIntent;
-import com.example.javaagentmvp.admissionworkflow.intent.ConversationTurnResolver;
-import com.example.javaagentmvp.admissionworkflow.intent.ResolvedTurn;
-import com.example.javaagentmvp.admissionworkflow.intent.SlotDelta;
+import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionOntologyRegistry;
+import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionPriorSlotsBuilder;
+import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionQueryIr;
+import com.example.javaagentmvp.admissionworkflow.compiler.LocalAdmissionQueryCompiler;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -32,9 +32,14 @@ class RagQueryRouterTest {
             "(专业|报考|报志愿|志愿|可报|能上|录取)[\\s\\S]{0,60}\\d{3,4}\\s*分",
             "(多少|几分|考了|高考)\\s*\\d{3,4}\\s*分[\\s\\S]{0,40}(专业|学校|院校|报|志愿)");
 
-    private final ConversationTurnResolver turnResolver = new ConversationTurnResolver();
+    private RagQueryRouter router;
+    private LocalAdmissionQueryCompiler compiler;
 
-    private final RagQueryRouter router = new RagQueryRouter(testProperties(), turnResolver);
+    @BeforeEach
+    void setUp() throws Exception {
+        router = new RagQueryRouter(testProperties());
+        compiler = localCompiler();
+    }
 
     private static RagProperties testProperties() {
         return new RagProperties(
@@ -67,6 +72,20 @@ class RagQueryRouterTest {
                                         java.util.List.of("/hfuu/", "hfuu/"))),
                         ""),
                 new RagProperties.Hybrid(true, 2, 3, 3, 60, 1.0, 0.9, "auto", "simple"));
+    }
+
+    private static LocalAdmissionQueryCompiler localCompiler() throws Exception {
+        AdmissionOntologyRegistry ontologyRegistry = new AdmissionOntologyRegistry();
+        ontologyRegistry.load();
+        return new LocalAdmissionQueryCompiler(
+                ontologyRegistry,
+                new AdmissionPriorSlotsBuilder(ontologyRegistry),
+                new RagQueryRouter(testProperties()));
+    }
+
+    private RagQueryRouter.Decision decideCompiled(String message, List<String> priorMessages) {
+        AdmissionQueryIr query = compiler.compile(message, priorMessages);
+        return router.decide(query, message);
     }
 
     @Test
@@ -105,13 +124,7 @@ class RagQueryRouterTest {
 
     @Test
     void usesRagForResolvedPolicyIntent() {
-        RagQueryRouter.Decision decision = router.decide(
-                new ResolvedTurn(
-                        AdmissionIntent.POLICY,
-                        AdmissionInputParser.parse("合工大转专业政策"),
-                        SlotDelta.NONE,
-                        false),
-                "合工大转专业政策");
+        RagQueryRouter.Decision decision = router.decide("合工大转专业政策");
         assertTrue(decision.useRag());
     }
 
@@ -123,40 +136,36 @@ class RagQueryRouterTest {
 
     @Test
     void skipsRagForScoreQueryFollowUp() {
-        RagQueryRouter.Decision decision = router.decide(
+        RagQueryRouter.Decision decision = decideCompiled(
                 "安徽，物理类， 2025， 普通批",
-                List.of("630分可以报考什么专业"),
-                List.of("请提供您的所在省份和科类（物理类/历史类），以便查询630分可报考的专业。"));
+                List.of("630分可以报考什么专业"));
         assertFalse(decision.useRag());
         assertFalse(decision.shouldRetrieve());
     }
 
     @Test
     void skipsRagForRankQueryProvinceFollowUp() {
-        RagQueryRouter.Decision decision = router.decide(
+        RagQueryRouter.Decision decision = decideCompiled(
                 "浙江呢？",
-                List.of("600分在安徽省的排名"),
-                List.of("rank-result-table 位次 一分一段"));
+                List.of("600分在安徽省的排名"));
         assertFalse(decision.useRag());
         assertFalse(decision.shouldRetrieve());
     }
 
     @Test
     void skipsRagForRankQueryScoreFollowUp() {
-        RagQueryRouter.Decision decision = router.decide(
+        RagQueryRouter.Decision decision = decideCompiled(
                 "620分呢？",
-                List.of("600分在安徽省的排名"),
-                List.of("rank-result-table"));
+                List.of("600分在安徽省的排名"));
         assertFalse(decision.useRag());
         assertFalse(decision.shouldRetrieve());
     }
 
     @Test
     void usesRagWhenFollowUpIsBrochureNotScoreParams() {
-        RagQueryRouter.Decision decision = router.decide(
+        RagQueryRouter.Decision decision = decideCompiled(
                 "合工大2025年招生章程",
-                List.of("630分可以报考什么专业"),
-                List.of("请提供您的所在省份和科类"));
+                List.of("630分可以报考什么专业"));
         assertTrue(decision.useRag());
     }
 

@@ -3,6 +3,7 @@ package com.example.javaagentmvp.admissionworkflow.tool;
 import com.example.javaagentmvp.observability.AgentMetrics;
 import com.example.javaagentmvp.observability.TraceResponseFilter;
 import com.example.javaagentmvp.admissionworkflow.format.RankSubjectGroupResolver;
+import com.example.javaagentmvp.admissionworkflow.format.ScoreToRankResolver;
 import com.example.javaagentmvp.chat.ui.McpTableExtractor;
 import com.example.javaagentmvp.dbagent.DbAgentTargetRegistry;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -109,6 +110,36 @@ public class AdmissionScoreToolClient {
         return parsed;
     }
 
+    /**
+     * Resolves score to provincial rank via {@code getRankByScore}, then queries majors with
+     * {@code getMajorByRank} (more accurate than {@code getMajorByScore}).
+     */
+    public JsonNode getMajorsForScore(
+            String runId,
+            int userScore,
+            String province,
+            String subjectGroup,
+            Integer year,
+            String admissionType) {
+        JsonNode rankResult = getRankByScore(runId, userScore, province, subjectGroup, year);
+        int userRank = ScoreToRankResolver.resolveRank(rankResult, year, subjectGroup)
+                .orElseThrow(() -> new IllegalStateException(
+                        "无法将 " + userScore + " 分转换为位次，请补充省份、科类或年份"));
+        JsonNode majorResult = getMajorByRank(
+                runId, userRank, province, subjectGroup, year, admissionType);
+        if (majorResult instanceof ObjectNode objectNode) {
+            objectNode.put("user_score", userScore);
+            objectNode.put("resolved_rank", userRank);
+        }
+        log.info("[WORKFLOW MCP runId={}] score={} province={} resolvedRank={} majorCount={}",
+                runId,
+                userScore,
+                province,
+                userRank,
+                majorResult.path("count").asInt(majorResult.path("majors").size()));
+        return majorResult;
+    }
+
     public JsonNode getMajorByScore(
             String runId,
             int userScore,
@@ -180,6 +211,74 @@ public class AdmissionScoreToolClient {
         return parsed;
     }
 
+    public JsonNode getMajorByRank(
+            String runId,
+            int userRank,
+            String province,
+            String subjectGroup,
+            Integer year,
+            String admissionType) {
+        ToolCallback callback = resolveMajorByRankCallback();
+        String toolName = callback.getToolDefinition().name();
+        ObjectNode args = objectMapper.createObjectNode();
+        args.put("rank", userRank);
+        args.put("province", province);
+        if (subjectGroup != null && !subjectGroup.isBlank()) {
+            args.put("subject_group", subjectGroup);
+        }
+        if (year != null) {
+            args.put("year", year);
+        }
+        if (admissionType != null && !admissionType.isBlank()) {
+            args.put("admission_type", admissionType);
+        }
+
+        String argsJson;
+        try {
+            argsJson = objectMapper.writeValueAsString(args);
+        }
+        catch (JsonProcessingException ex) {
+            throw new IllegalStateException("Failed to serialize getMajorByRank args", ex);
+        }
+
+        log.info("[WORKFLOW MCP runId={}] >>> {} userRank={} args={}",
+                runId, toolName, userRank, argsJson);
+
+        long startedAt = System.nanoTime();
+        String response;
+        try {
+            response = TraceResponseFilter.observe(
+                    observationRegistry,
+                    "agent.tool.getMajorByRank",
+                    "getMajorByRank",
+                    () -> callback.call(argsJson));
+        }
+        catch (RuntimeException ex) {
+            long elapsedMs = (System.nanoTime() - startedAt) / 1_000_000;
+            agentMetrics.recordToolCall("getMajorByRank", elapsedMs);
+            log.error("[WORKFLOW MCP runId={}] <<< {} error ({} ms): {}",
+                    runId, toolName, elapsedMs, ex.getMessage(), ex);
+            throw ex;
+        }
+
+        long elapsedMs = (System.nanoTime() - startedAt) / 1_000_000;
+        agentMetrics.recordToolCall("getMajorByRank", elapsedMs);
+        JsonNode parsed = mcpTableExtractor.parseMajorByScoreRoot(response).orElse(null);
+        if (parsed == null) {
+            log.error("[WORKFLOW MCP runId={}] <<< {} invalid JSON ({} ms): {}",
+                    runId, toolName, elapsedMs, truncate(response));
+            throw new IllegalStateException("Failed to parse getMajorByRank response");
+        }
+
+        int count = parsed.path("count").asInt(parsed.path("majors").size());
+        if (parsed instanceof ObjectNode objectNode) {
+            objectNode.put("user_rank", userRank);
+        }
+        log.info("[WORKFLOW MCP runId={}] <<< {} ({} ms) userRank={} count={} data={}",
+                runId, toolName, elapsedMs, userRank, count, truncate(mcpTableExtractor.unwrapToolPayload(response)));
+        return parsed;
+    }
+
     /** MCP query score: user score + 15 (冲档上限), clamped to valid range. */
     public static int mcpQueryScore(int userScore) {
         return clampScore(userScore + SCORE_TIER_DELTA);
@@ -213,8 +312,18 @@ public class AdmissionScoreToolClient {
         List<ToolCallback> callbacks =
                 SyncMcpToolCallbackProvider.syncToolCallbacks(dbAgentTargetRegistry.chatMcpClients());
         return callbacks.stream()
-                .filter(callback -> callback.getToolDefinition().name().contains("getMajorByScore"))
+                .filter(callback -> callback.getToolDefinition().name().contains("getMajorByScore")
+                        && !callback.getToolDefinition().name().contains("getMajorByRank"))
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException("getMajorByScore MCP tool not found"));
+    }
+
+    private ToolCallback resolveMajorByRankCallback() {
+        List<ToolCallback> callbacks =
+                SyncMcpToolCallbackProvider.syncToolCallbacks(dbAgentTargetRegistry.chatMcpClients());
+        return callbacks.stream()
+                .filter(callback -> callback.getToolDefinition().name().contains("getMajorByRank"))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("getMajorByRank MCP tool not found"));
     }
 }

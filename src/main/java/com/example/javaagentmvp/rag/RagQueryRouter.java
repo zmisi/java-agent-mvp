@@ -1,8 +1,9 @@
 package com.example.javaagentmvp.rag;
 
+import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionQueryIr;
+import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionSlotsIr;
+import com.example.javaagentmvp.admissionworkflow.compiler.MultiturnIntentSupport;
 import com.example.javaagentmvp.admissionworkflow.intent.AdmissionIntent;
-import com.example.javaagentmvp.admissionworkflow.intent.ConversationTurnResolver;
-import com.example.javaagentmvp.admissionworkflow.intent.ResolvedTurn;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.document.Document;
@@ -21,15 +22,12 @@ public class RagQueryRouter {
 
     private final RagProperties ragProperties;
 
-    private final ConversationTurnResolver turnResolver;
-
     private final List<Pattern> ragPatterns;
 
     private final List<Pattern> databasePatterns;
 
-    public RagQueryRouter(RagProperties ragProperties, ConversationTurnResolver turnResolver) {
+    public RagQueryRouter(RagProperties ragProperties) {
         this.ragProperties = ragProperties;
-        this.turnResolver = turnResolver;
         this.ragPatterns = compilePatterns(ragProperties.routing().ragPatterns(), "rag-patterns");
         this.databasePatterns = compilePatterns(ragProperties.routing().databasePatterns(), "database-patterns");
         log.info("RAG routing loaded: {} rag pattern(s), {} database pattern(s)",
@@ -37,15 +35,26 @@ public class RagQueryRouter {
     }
 
     public Decision decide(String message) {
-        return decide(message, List.of(), List.of());
+        String normalized = message == null ? "" : message.strip();
+        AdmissionIntent intent = MultiturnIntentSupport.classifyExplicitIntent(normalized);
+        if (intent == AdmissionIntent.UNKNOWN) {
+            return decide(AdmissionQueryIr.empty(normalized), normalized);
+        }
+        AdmissionQueryIr query = new AdmissionQueryIr(
+                taskFromIntent(intent),
+                AdmissionSlotsIr.empty(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                0.0,
+                normalized,
+                null);
+        return decide(query, normalized);
     }
 
-    public Decision decide(String message, List<String> priorUserMessages, List<String> priorContextHints) {
-        ResolvedTurn resolved = turnResolver.resolve(message, priorUserMessages, priorContextHints);
-        return decide(resolved, message);
-    }
-
-    public Decision decide(ResolvedTurn resolved, String rawMessage) {
+    public Decision decide(AdmissionQueryIr query, String rawMessage) {
         if (!ragProperties.enabled()) {
             return Decision.skip("RAG disabled");
         }
@@ -58,7 +67,7 @@ public class RagQueryRouter {
             return Decision.skip("structured query — use MCP tools (SQL, getMajorByScore, or getRankByScore)");
         }
 
-        AdmissionIntent intent = resolved == null ? AdmissionIntent.UNKNOWN : resolved.intent();
+        AdmissionIntent intent = query == null ? AdmissionIntent.UNKNOWN : query.toIntent();
         if (intent == AdmissionIntent.RANK) {
             return Decision.skip("resolved intent RANK — use MCP getRankByScore");
         }
@@ -89,6 +98,16 @@ public class RagQueryRouter {
                     + formatDistance(bestDistance) + " > maxDistance=" + ragProperties.maxDistance() + ")");
         }
         return Decision.use("retrieval score ok (best distance=" + formatDistance(bestDistance) + ")");
+    }
+
+    private static String taskFromIntent(AdmissionIntent intent) {
+        return switch (intent) {
+            case SCORE -> "search_majors";
+            case RANK -> "search_rank";
+            case POLICY -> "policy_qa";
+            case REPORT -> "report";
+            case UNKNOWN -> "unknown";
+        };
     }
 
     private static boolean matchesPatterns(String message, List<Pattern> patterns) {

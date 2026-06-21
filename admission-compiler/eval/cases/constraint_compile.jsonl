@@ -1,10 +1,11 @@
 {"id":"yangtze-no-teacher","input":"我要报考长三角的大学，不当老师","expect":{"task":"search_majors","provinces":["江苏","浙江","上海"],"exclude_school":["师范"],"exclude_major":["师范"],"needs_clarification":["score","subject_group"]}}
-{"id":"yangtze-complex-preferences","input":"我要报考长三角的大学，不当老师，就业前景比较好，收入比较高，能进央国企","expect":{"task":"search_majors","provinces":["江苏","浙江","上海"],"exclude_school":["师范"],"preferences":["employment_outlook","salary","state_owned_employability"],"needs_clarification":["score","subject_group"]}}
+{"id":"yangtze-complex-preferences","input":"我要报考长三角的大学，不当老师，就业前景比较好，收入比较高，能进央国企","expect":{"task":"search_majors","provinces":["江苏","浙江","上海"],"exclude_school":["师范"],"unsupported_constraints":["employment_data","salary_data","state_owned_employability"],"needs_clarification":["score","subject_group"]}}
 {"id":"score-anhui-620","input":"安徽物理类620分能上什么专业","expect":{"task":"search_majors","score":620,"provinces":["安徽"],"subject_group":"物理类","needs_clarification":[]}}
+{"id":"rank-anhui-10000-majors","input":"排名10000名 安徽 物理类 能报什么专业","expect":{"task":"search_majors","rank":10000,"provinces":["安徽"],"subject_group":"物理类","needs_clarification":[]}}
 {"id":"rank-anhui-620","input":"安徽物理类620分排名多少","expect":{"task":"search_rank","score":620,"provinces":["安徽"],"subject_group":"物理类"}}
 {"id":"policy-charter","input":"合工大2025年招生章程录取规则是什么","expect":{"task":"policy_qa"}}
 {"id":"report-mixed","input":"安徽物理类620分，合工大计算机和软件工程政策","expect":{"task":"report","score":620,"provinces":["安徽"]}}
 {"id":"followup-province","input":"那浙江呢？","prior_user_messages":["安徽物理类620分能上什么专业"],"prior_slots":{"score":620,"provinces":["安徽"],"subject_group":"物理类"},"expect":{"task":"search_majors","score":620,"provinces":["浙江"],"subject_group":"物理类"}}
 {"id":"exclude-normal-school","input":"600分江苏物理类，不要师范","expect":{"task":"search_majors","score":600,"provinces":["江苏"],"exclude_school":["师范"]}}
 {"id":"greeting","input":"你好","expect":{"task":"unknown"}}
-{"id":"greeting","input":"ed89a900c844700e7801d842d71b3ab1a78043543178d33ba536e385f237ca49","expect":{"task":"unknown"}}
+{"id":"unsupported-tuition-public","input":"620分江苏公办，学费便宜，物理类","expect":{"task":"search_majors","score":620,"provinces":["江苏"],"subject_group":"物理类","unsupported_constraints":["school_nature_public","tuition"]}}

@@ -78,7 +78,7 @@ class SynthesizeReportNodeTest {
         when(responseSpec.content()).thenReturn("## 概况\n匹配 1 条专业。");
 
         WorkflowContext context = new WorkflowContext("run-1", "安徽630分合工大计算机政策");
-        context.put(IntentClassifyNode.KEY_INTENT, AdmissionIntent.REPORT);
+        context.put(CompileQueryNode.KEY_INTENT, AdmissionIntent.REPORT);
         Map<String, Object> finalResult = new LinkedHashMap<>();
         finalResult.put("intent", AdmissionIntent.REPORT.name());
         finalResult.put("summary", "综合报告：匹配 1 条");
@@ -105,7 +105,7 @@ class SynthesizeReportNodeTest {
         when(requestSpec.call()).thenThrow(new RuntimeException("model unavailable"));
 
         WorkflowContext context = new WorkflowContext("run-2", "安徽630分");
-        context.put(IntentClassifyNode.KEY_INTENT, AdmissionIntent.SCORE);
+        context.put(CompileQueryNode.KEY_INTENT, AdmissionIntent.SCORE);
         Map<String, Object> finalResult = new LinkedHashMap<>();
         finalResult.put("summary", "已查询到 3 个可报专业");
         context.put(FormatResponseNode.KEY_FINAL_RESULT, finalResult);
@@ -171,7 +171,7 @@ class SynthesizeReportNodeTest {
     @Test
     void synthesizesRankReportDeterministicallyWithoutLlm() {
         WorkflowContext context = new WorkflowContext("run-5", "600分在安徽省的排名");
-        context.put(IntentClassifyNode.KEY_INTENT, AdmissionIntent.RANK);
+        context.put(CompileQueryNode.KEY_INTENT, AdmissionIntent.RANK);
         Map<String, Object> finalResult = new LinkedHashMap<>();
         finalResult.put("intent", AdmissionIntent.RANK.name());
         finalResult.put("summary", "已查询到 2 条位次记录");

@@ -2,13 +2,13 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-COPY requirements.txt .
+COPY admission-compiler/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app ./app
-COPY src ./src
-COPY ontology ./ontology
-COPY schema ./schema
+COPY admission-compiler/app ./app
+COPY admission-compiler/src ./src
+COPY src/main/resources/admission-ontology ./ontology
+COPY admission-compiler/schema ./schema
 
 EXPOSE 8090
 

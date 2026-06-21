@@ -136,6 +136,19 @@
           "default": null,
           "title": "Score"
         },
+        "rank": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rank"
+        },
         "provinces": {
           "items": {
             "type": "string"

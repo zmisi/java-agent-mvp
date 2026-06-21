@@ -1,5 +1,6 @@
 package com.example.javaagentmvp.auth;
 
+import com.example.javaagentmvp.chat.ui.UniversityProfileProperties;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
@@ -13,14 +14,19 @@ public class AuthWebMvcConfig implements WebMvcConfigurer {
     private final AuthInterceptor authInterceptor;
     private final WechatLoginRateLimitInterceptor loginRateLimitInterceptor;
     private final WechatAuthProperties wechatAuthProperties;
+    private final UniversityProfileProperties universityProfileProperties;
 
     public AuthWebMvcConfig(
             AuthInterceptor authInterceptor,
             WechatLoginRateLimitInterceptor loginRateLimitInterceptor,
-            WechatAuthProperties wechatAuthProperties) {
+            WechatAuthProperties wechatAuthProperties,
+            UniversityProfileProperties universityProfileProperties) {
         this.authInterceptor = authInterceptor;
         this.loginRateLimitInterceptor = loginRateLimitInterceptor;
         this.wechatAuthProperties = wechatAuthProperties;
+        this.universityProfileProperties = universityProfileProperties == null
+                ? UniversityProfileProperties.defaults()
+                : universityProfileProperties;
     }
 
     @Override
@@ -44,5 +50,16 @@ public class AuthWebMvcConfig implements WebMvcConfigurer {
         }
         registry.addResourceHandler("/uploads/wechat-avatars/**")
                 .addResourceLocations(location);
+
+        String logoLocation = Path.of(universityProfileProperties.logoDir())
+                .toAbsolutePath()
+                .normalize()
+                .toUri()
+                .toString();
+        if (!logoLocation.endsWith("/")) {
+            logoLocation = logoLocation + "/";
+        }
+        registry.addResourceHandler("/university-logos/**")
+                .addResourceLocations(logoLocation);
     }
 }

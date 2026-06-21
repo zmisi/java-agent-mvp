@@ -33,7 +33,12 @@ public class AdmissionPriorSlotsBuilder {
             for (AdmissionRegionIr region : ontologyRegistry.matchRegions(message)) {
                 fromMessage = withRegionProvinces(fromMessage, region);
             }
-            merged = fromMessage.mergedWith(merged);
+            if (!fromMessage.provincesOrEmpty().isEmpty()) {
+                merged = fromMessage.mergedWith(merged.withoutProvinces());
+            }
+            else {
+                merged = fromMessage.mergedWith(merged);
+            }
         }
         return merged;
     }
@@ -45,6 +50,7 @@ public class AdmissionPriorSlotsBuilder {
         }
         return new AdmissionSlotsIr(
                 parsed.score(),
+                parsed.rank(),
                 provinces,
                 parsed.subjectGroup(),
                 parsed.year(),
@@ -60,6 +66,7 @@ public class AdmissionPriorSlotsBuilder {
         }
         return new AdmissionSlotsIr(
                 slots.score(),
+                slots.rank(),
                 provinces,
                 slots.subjectGroup(),
                 slots.year(),

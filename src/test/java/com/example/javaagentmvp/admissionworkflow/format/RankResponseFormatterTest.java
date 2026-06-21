@@ -104,6 +104,26 @@ class RankResponseFormatterTest {
     }
 
     @Test
+    void formatGroupsMultipleProvincesIntoSeparateSections() throws Exception {
+        String json = """
+                {
+                  "count": 3,
+                  "ranks": [
+                    {"year": 2025, "province": "江苏", "subject_group": "历史类", "rank_min": 1000, "rank_max": 1100},
+                    {"year": 2025, "province": "浙江", "subject_group": "综合类", "rank_min": 2000, "rank_max": 2100},
+                    {"year": 2025, "province": "上海", "subject_group": "综合类", "rank_min": 3000, "rank_max": 3100}
+                  ]
+                }
+                """;
+        String html = RankResponseFormatter.format(objectMapper.readTree(json), 600, null);
+
+        assertThat(html).contains("江苏、浙江、上海");
+        assertThat(html).contains("rank-table-header\">江苏");
+        assertThat(html).contains("rank-table-header\">浙江");
+        assertThat(html).contains("rank-table-header\">上海");
+    }
+
+    @Test
     void returnsEmptyMessageWhenNoRanks() throws Exception {
         String markdown = RankResponseFormatter.format(objectMapper.readTree("{\"count\":0,\"ranks\":[]}"), 600, "安徽");
         assertThat(markdown).contains("未能查询到");

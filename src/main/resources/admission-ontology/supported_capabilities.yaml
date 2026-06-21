@@ -1,0 +1,49 @@
+# Capabilities the system can execute deterministically today (MCP / RAG / Java filters).
+# Used in compiler prompts so the model knows what is in-scope vs unsupported_signals.yaml.
+supported_capabilities:
+  tasks:
+    - key: search_majors
+      label: 查可报专业/院校
+      detail: 按分数（先转位次）或位次+省份查录取专业，系统分冲/稳/保三档
+      data_source: MCP getRankByScore → getMajorByRank（分数输入）；或直接 getMajorByRank（位次输入）
+    - key: search_rank
+      label: 查省内位次
+      detail: 按分数查一分一段表位次（可多省）
+      data_source: MCP getRankByScore
+    - key: policy_qa
+      label: 招生政策/章程问答
+      detail: 招生简章、录取规则、计划等文档问答
+      data_source: RAG
+    - key: report
+      label: 综合志愿报告
+      detail: 分数+政策组合报告（Workflow）
+
+  slots:
+    - key: score
+      label: 高考分数
+    - key: rank
+      label: 省内排名位次
+    - key: provinces
+      label: 省份（可多个）
+    - key: subject_group
+      label: 科类（物理类/历史类；位次查询可选）
+    - key: year
+      label: 年份
+    - key: admission_type
+      label: 批次（普通批/专项等）
+
+  filters:
+    - key: exclude_school
+      label: 排除院校（院校名称关键词，如「师范」）
+    - key: exclude_major
+      label: 排除专业（专业名称关键词）
+    - key: include_major
+      label: 限定具体专业（专业名称子串：计算机、软件工程等）
+    - key: include_major_category
+      label: 专业大类（工科/理科/文科/医学/经管；关联阳光高考学科门类）
+    - key: region
+      label: 区域短语展开为省份（长三角、东北、江浙沪等）
+
+  out_of_scope_hint: >
+    保研率、就业率、薪资、QS/大学排名、学费、985/211 标签、公办民办、城市
+    等均不在上表范围内；命中后写入 unsupported_constraints，勿假装已筛选或编造数据。

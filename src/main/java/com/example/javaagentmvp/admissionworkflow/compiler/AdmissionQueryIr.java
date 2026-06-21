@@ -13,6 +13,7 @@ public record AdmissionQueryIr(
         @JsonProperty("filters") AdmissionFiltersIr filters,
         @JsonProperty("preferences") List<AdmissionPreferenceIr> preferences,
         @JsonProperty("regions") List<AdmissionRegionIr> regions,
+        @JsonProperty("unsupported_constraints") List<UnsupportedConstraintIr> unsupportedConstraints,
         @JsonProperty("needs_clarification") List<String> needsClarification,
         @JsonProperty("confidence") double confidence,
         @JsonProperty("raw_message") String rawMessage,
@@ -31,9 +32,16 @@ public record AdmissionQueryIr(
         if (regions == null) {
             regions = List.of();
         }
+        if (unsupportedConstraints == null) {
+            unsupportedConstraints = List.of();
+        }
         if (needsClarification == null) {
             needsClarification = List.of();
         }
+    }
+
+    public boolean hasUnsupportedConstraints() {
+        return unsupportedConstraints != null && !unsupportedConstraints.isEmpty();
     }
 
     public AdmissionIntent toIntent() {
@@ -54,10 +62,11 @@ public record AdmissionQueryIr(
         if (intent == AdmissionIntent.SCORE || intent == AdmissionIntent.REPORT) {
             return needsClarification.contains("score")
                     || needsClarification.contains("provinces")
-                    || needsClarification.contains("subject_group");
+                    || needsClarification.contains("subject_group")
+                    || needsClarification.contains(MajorCategoryClarificationSupport.FIELD);
         }
         if (intent == AdmissionIntent.RANK) {
-            return needsClarification.contains("score");
+            return needsClarification.stream().anyMatch("score"::equals);
         }
         return false;
     }
@@ -67,6 +76,7 @@ public record AdmissionQueryIr(
                 "unknown",
                 AdmissionSlotsIr.empty(),
                 AdmissionFiltersIr.empty(),
+                List.of(),
                 List.of(),
                 List.of(),
                 List.of(),

@@ -473,6 +473,26 @@ body {
   color: var(--text);
 }
 
+.sidebar-ref-link {
+  display: block;
+  padding: 6px 10px 6px 22px;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.35;
+  text-decoration: none;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.sidebar-ref-link:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+#guideSection .sidebar-group-label {
+  margin-top: 2px;
+}
+
 .sidebar-footer {
   padding: 8px;
   border-top: 1px solid var(--border);
@@ -1680,7 +1700,7 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 12px;
+  padding: 12px;
   cursor: pointer;
   list-style: none;
   user-select: none;
@@ -1690,20 +1710,126 @@ body {
   display: none;
 }
 
+.chat-table-school-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.chat-table-school-logo-wrap {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+}
+
+.chat-table-school-logo {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  display: block;
+}
+
+.chat-table-school-logo-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 18px;
+  color: color-mix(in oklab, var(--accent) 70%, var(--text));
+  background: color-mix(in oklab, var(--accent) 10%, var(--bg-elevated));
+}
+
 .chat-table-school-main {
   flex: 1;
   min-width: 0;
 }
 
+.chat-table-school-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chat-table-school-title-extra {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
 .chat-table-school-name {
-  display: block;
+  flex-shrink: 0;
   font-weight: 600;
+  font-size: 15px;
+  line-height: 1.35;
   color: var(--text);
+}
+
+.chat-table-school-location {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  line-height: 1.4;
+}
+
+.chat-table-school-province {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.chat-table-school-pin {
+  width: 10px;
+  height: 10px;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  background: currentColor;
+  opacity: 0.72;
+  flex-shrink: 0;
+}
+
+.chat-table-school-divider {
+  width: 1px;
+  height: 12px;
+  background: var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.chat-table-school-department {
+  min-width: 0;
+}
+
+.chat-table-school-tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chat-table-school-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+  background: color-mix(in oklab, var(--bg-elevated) 88%, var(--bg));
 }
 
 .chat-table-school-meta {
   display: block;
-  margin-top: 4px;
+  margin-top: 6px;
   color: var(--text-muted);
   font-size: var(--font-size-xs);
 }
@@ -1799,4 +1925,124 @@ body {
 .chat-table-grid .wrap {
   white-space: normal;
   word-break: break-all;
+}
+
+/* Guide reference pages */
+.guide-page-body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.guide-page {
+  max-width: 48rem;
+  margin: 0 auto;
+  padding: 32px 20px 64px;
+}
+
+.guide-page-header {
+  margin-bottom: 28px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.guide-page-title {
+  margin: 0 0 8px;
+  font-size: calc(var(--font-size-base) + 10px);
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.guide-page-subtitle {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.guide-content :where(p, ul, ol) {
+  margin: 0.65em 0;
+  line-height: 1.65;
+}
+
+.guide-content :first-child {
+  margin-top: 0;
+}
+
+.guide-content :last-child {
+  margin-bottom: 0;
+}
+
+.guide-content :where(h1, h2, h3) {
+  margin: 1.4em 0 0.6em;
+  line-height: 1.35;
+}
+
+.guide-content h1 {
+  font-size: calc(var(--font-size-base) + 8px);
+}
+
+.guide-content h2 {
+  font-size: calc(var(--font-size-base) + 4px);
+}
+
+.guide-content h3 {
+  font-size: calc(var(--font-size-base) + 2px);
+}
+
+.guide-content blockquote {
+  margin: 1em 0;
+  padding: 10px 14px;
+  border-left: 3px solid var(--accent);
+  background: color-mix(in oklab, var(--accent) 8%, var(--bg-elevated));
+  color: var(--text-secondary);
+}
+
+.guide-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1em 0;
+  font-size: var(--font-size-sm);
+}
+
+.guide-content th,
+.guide-content td {
+  padding: 8px 10px;
+  border: 1px solid var(--border-subtle);
+  text-align: left;
+  vertical-align: top;
+}
+
+.guide-content th {
+  background: color-mix(in oklab, var(--accent) 8%, var(--bg-elevated));
+  font-weight: 600;
+}
+
+.guide-content hr {
+  border: none;
+  border-top: 1px solid var(--border-subtle);
+  margin: 1.5em 0;
+}
+
+.guide-content code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.92em;
+}
+
+.guide-content :not(pre) > code {
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  background: var(--bg-elevated);
+}
+
+@media (max-width: 640px) {
+  .guide-page {
+    padding: 20px 14px 48px;
+  }
+
+  .guide-content table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
 }

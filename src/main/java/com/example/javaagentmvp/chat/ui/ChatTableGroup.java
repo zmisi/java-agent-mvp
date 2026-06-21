@@ -8,5 +8,18 @@ public record ChatTableGroup(
         String universityName,
         int majorCount,
         String minScore,
-        List<Map<String, String>> majors) {
+        List<Map<String, String>> majors,
+        String logoUrl,
+        String province,
+        String department,
+        List<String> tags) {
+
+    public ChatTableGroup(
+            String universityCode,
+            String universityName,
+            int majorCount,
+            String minScore,
+            List<Map<String, String>> majors) {
+        this(universityCode, universityName, majorCount, minScore, majors, null, null, null, null);
+    }
 }

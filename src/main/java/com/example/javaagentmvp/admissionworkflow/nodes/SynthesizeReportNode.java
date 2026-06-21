@@ -1,6 +1,7 @@
 package com.example.javaagentmvp.admissionworkflow.nodes;
 
 import com.example.javaagentmvp.admissionworkflow.AdmissionWorkflowProperties;
+import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionQueryIr;
 import com.example.javaagentmvp.admissionworkflow.engine.WorkflowContext;
 import com.example.javaagentmvp.admissionworkflow.engine.WorkflowNode;
 import com.example.javaagentmvp.admissionworkflow.engine.WorkflowNodeResult;
@@ -71,7 +72,7 @@ public class SynthesizeReportNode implements WorkflowNode {
 
         String summary = String.valueOf(finalResult.getOrDefault("summary", ""));
 
-        AdmissionIntent intent = context.get(IntentClassifyNode.KEY_INTENT, AdmissionIntent.class);
+        AdmissionIntent intent = context.get(CompileQueryNode.KEY_INTENT, AdmissionIntent.class);
         if (intent == AdmissionIntent.UNKNOWN && !hasUsableData(context, finalResult)) {
             applyReport(finalResult, summary, false);
             return WorkflowNodeResult.skipped("unknown intent without data");
@@ -222,8 +223,16 @@ public class SynthesizeReportNode implements WorkflowNode {
         if (count <= 0) {
             return null;
         }
+        AdmissionQueryIr query = context.get(CompileQueryNode.KEY_ADMISSION_QUERY, AdmissionQueryIr.class);
         AdmissionInputParser.ParsedAdmissionInput parsed = AdmissionInputParser.parse(context.inputMessage());
-        return RankResponseFormatter.format(rankResult, parsed.score(), parsed.province());
+        Integer score = query != null && query.slots().score() != null
+                ? query.slots().score()
+                : parsed.score();
+        List<String> provinces = query != null ? query.slots().provincesOrEmpty() : List.of();
+        String province = provinces.size() == 1
+                ? provinces.get(0)
+                : parsed.province();
+        return RankResponseFormatter.format(rankResult, score, province);
     }
 
     private static JsonNode toJsonNode(Object value) {

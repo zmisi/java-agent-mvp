@@ -15,6 +15,7 @@ def merge_slots(prior: Slots | None, current: Slots, *, geography_overridden: bo
         provinces = _merge_list(prior.provinces, current.provinces)
     return Slots(
         score=current.score if current.score is not None else prior.score,
+        rank=current.rank if current.rank is not None else prior.rank,
         provinces=provinces,
         subject_group=current.subject_group or prior.subject_group,
         year=current.year if current.year is not None else prior.year,

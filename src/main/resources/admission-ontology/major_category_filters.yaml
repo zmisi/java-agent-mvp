@@ -1,0 +1,31 @@
+# 专业大类筛选（关联 admissions.major_catalog.discipline_groups / discipline_category）
+# 用户可选大类（澄清提示）：工科、理科、文科、医学、经管
+major_category_filters:
+  工科:
+    discipline_groups: [工科]
+    label: 工科/专业大类
+    aliases: [工科专业, 只看工科, 理工科, 理工类专业, 工科类, 只要工科, 仅工科]
+  理科:
+    discipline_groups: [理科]
+    label: 理科/专业大类
+    aliases: [理科专业, 只看理科, 理科类]
+  文科:
+    discipline_groups: [文科]
+    label: 文科/专业大类
+    aliases: [文科专业, 只看文科, 文史类, 文史]
+  医学:
+    discipline_groups: [医科]
+    label: 医学/专业大类
+    aliases: [医学专业, 医科, 临床医学类, 只看医学]
+  经管:
+    discipline_categories: [经济学, 管理学]
+    label: 经管/商科大类
+    aliases: [经管类, 商科, 商科专业, 经济管理类]
+  经济学:
+    discipline_categories: [经济学]
+    label: 经济学类
+    aliases: [经济学类, 经济类, 只看经济学, 只要经济学, 仅经济学, 经济类专业]
+  管理学:
+    discipline_categories: [管理学]
+    label: 管理学类
+    aliases: [管理学类, 管理类, 只看管理学, 只要管理学, 仅管理学, 管理类专业]

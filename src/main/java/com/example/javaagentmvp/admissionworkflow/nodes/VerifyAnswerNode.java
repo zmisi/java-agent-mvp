@@ -40,7 +40,7 @@ public class VerifyAnswerNode implements WorkflowNode {
             return WorkflowNodeResult.succeeded(verification);
         }
 
-        AdmissionIntent intent = context.get(IntentClassifyNode.KEY_INTENT, AdmissionIntent.class);
+        AdmissionIntent intent = context.get(CompileQueryNode.KEY_INTENT, AdmissionIntent.class);
         JsonNode scoreResult = effectiveScoreResult(context);
         @SuppressWarnings("unchecked")
         List<RagSource> policySources = (List<RagSource>) context.get(PolicyRagNode.KEY_POLICY_SOURCES);

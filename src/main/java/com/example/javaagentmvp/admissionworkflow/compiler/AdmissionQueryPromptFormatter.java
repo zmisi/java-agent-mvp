@@ -30,6 +30,7 @@ public final class AdmissionQueryPromptFormatter {
         }
 
         StringBuilder sb = new StringBuilder();
+        sb.append(SupportedCapabilitiesSupport.formatPromptBlock()).append("\n\n");
         sb.append("## 当前对话任务（Query Compiler 解析，请严格遵循）\n");
         sb.append("- 任务: ").append(taskLabel(query.task())).append('\n');
 
@@ -43,6 +44,7 @@ public final class AdmissionQueryPromptFormatter {
 
         AdmissionSlotsIr slots = query.slots();
         appendSlot(sb, "分数", slots.score() != null ? slots.score() + "分" : null);
+        appendSlot(sb, "位次", slots.rank() != null ? "第" + slots.rank() + "名" : null);
         if (!slots.provincesOrEmpty().isEmpty()) {
             sb.append("- 省份: ").append(String.join("、", slots.provincesOrEmpty())).append('\n');
         }
@@ -62,19 +64,44 @@ public final class AdmissionQueryPromptFormatter {
 
         appendFilters(sb, query.filters());
         appendPreferences(sb, query.preferences());
+        appendUnsupportedConstraints(sb, query.unsupportedConstraints());
 
         sb.append('\n');
-        if (intent == AdmissionIntent.RANK) {
-            sb.append("**必须**调用 getRankByScore，参数见上。\n");
-        }
-        else if (intent == AdmissionIntent.SCORE || intent == AdmissionIntent.REPORT) {
-            sb.append("**必须**调用 getMajorByScore，参数见上；系统会按冲/稳/保分层并应用排除条件。\n");
-            if (slots.provincesOrEmpty().size() > 1) {
-                sb.append("涉及多省查询时，工具会自动合并各省结果。\n");
-            }
-        }
-        else if (hasConstraints(query)) {
+        if (hasConstraints(query)) {
             sb.append("用户已表达择校/专业约束，回答时需体现排除项与偏好。\n");
+        }
+        return sb.toString().strip();
+    }
+
+    public static String formatPostMcpSynthesis(AdmissionQueryIr query, String synthesisPrompt) {
+        if (query == null) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("## 系统已预执行 MCP（Chat 强制路径）\n");
+        sb.append("- 任务: ").append(taskLabel(query.task())).append('\n');
+        sb.append("- 专业/位次数据已由系统按上方 IR 参数查询，表格将展示给客户端\n");
+        sb.append("- **禁止**再次调用 getMajorByScore / getMajorByRank / getRankByScore\n");
+        sb.append("- **禁止**编造录取分、位次或专业/院校列表\n");
+        sb.append("- 你只需写 **1-3 句** 导语与填报提示，勿重复表格中的每一行\n");
+        if (query.filters() != null && query.filters().hasMajorCategoryFilter()) {
+            List<String> labels = new ArrayList<>();
+            if (!query.filters().includeMajorDisciplineGroups().isEmpty()) {
+                labels.add("专业大类「" + String.join("、", query.filters().includeMajorDisciplineGroups()) + "」");
+            }
+            if (!query.filters().includeDisciplineCategories().isEmpty()) {
+                labels.add("学科门类「" + String.join("、", query.filters().includeDisciplineCategories()) + "」");
+            }
+            sb.append("- 表格已按").append(String.join("、", labels))
+                    .append("筛选；导语须确认已筛选，**禁止**说工科/理科等专业大类暂不支持\n");
+        }
+        if (query.filters() != null && !query.filters().excludeMajorKeywords().isEmpty()) {
+            sb.append("- 表格已应用排除条件，文案勿推荐被排除的方向\n");
+        }
+        appendUnsupportedConstraints(sb, query.unsupportedConstraints());
+        sb.append('\n');
+        if (synthesisPrompt != null && !synthesisPrompt.isBlank()) {
+            sb.append(synthesisPrompt.strip()).append('\n');
         }
         return sb.toString().strip();
     }
@@ -85,7 +112,8 @@ public final class AdmissionQueryPromptFormatter {
                 || !query.preferences().isEmpty()
                 || !filters.excludeSchoolNameContains().isEmpty()
                 || !filters.excludeMajorKeywords().isEmpty()
-                || !filters.includeMajorKeywords().isEmpty();
+                || !filters.includeMajorKeywords().isEmpty()
+                || filters.hasMajorCategoryFilter();
     }
 
     private static String taskLabel(String task) {
@@ -140,6 +168,12 @@ public final class AdmissionQueryPromptFormatter {
         if (!filters.includeMajorKeywords().isEmpty()) {
             parts.add("限定专业含「" + String.join("、", filters.includeMajorKeywords()) + "」");
         }
+        if (!filters.includeMajorDisciplineGroups().isEmpty()) {
+            parts.add("限定专业大类「" + String.join("、", filters.includeMajorDisciplineGroups()) + "」");
+        }
+        if (!filters.includeDisciplineCategories().isEmpty()) {
+            parts.add("限定学科门类「" + String.join("、", filters.includeDisciplineCategories()) + "」");
+        }
         if (!parts.isEmpty()) {
             sb.append("- 筛选: ").append(String.join("；", parts)).append('\n');
         }
@@ -153,6 +187,17 @@ public final class AdmissionQueryPromptFormatter {
                 .map(AdmissionQueryPromptFormatter::preferenceLabel)
                 .toList();
         sb.append("- 偏好: ").append(String.join("、", labels)).append('\n');
+    }
+
+    private static void appendUnsupportedConstraints(StringBuilder sb, List<UnsupportedConstraintIr> constraints) {
+        if (constraints == null || constraints.isEmpty()) {
+            return;
+        }
+        List<String> phrases = constraints.stream()
+                .map(UnsupportedConstraintIr::rawPhrase)
+                .toList();
+        sb.append("- 暂不可执行筛选: ").append(String.join("、", phrases))
+                .append("（勿假装已过滤或编造相关数据；回复中说明暂不支持，需求已记录，后续可能支持）\n");
     }
 
     private static String preferenceLabel(AdmissionPreferenceIr preference) {

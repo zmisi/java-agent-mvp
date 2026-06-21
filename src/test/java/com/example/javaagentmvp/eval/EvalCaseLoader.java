@@ -52,6 +52,54 @@ public final class EvalCaseLoader {
         return cases;
     }
 
+    public static List<ConstraintCompileCase> loadConstraintCompileCases(Path path) throws IOException {
+        return loadConstraintCompileCases(path, false);
+    }
+
+    public static List<ConstraintCompileCase> loadConstraintCompileCases(Path path, boolean includeTarget)
+            throws IOException {
+        List<ConstraintCompileCase> cases = new ArrayList<>();
+        for (String line : Files.readAllLines(path)) {
+            if (line.isBlank()) {
+                continue;
+            }
+            JsonNode node = MAPPER.readTree(line);
+            if (node.has("turns")) {
+                continue;
+            }
+            if (!includeTarget && "target".equals(textOrNull(node, "status"))) {
+                continue;
+            }
+            JsonNode expectNode = node.get("expect");
+            cases.add(new ConstraintCompileCase(
+                    node.path("id").asText(),
+                    node.path("input").asText(),
+                    readStringList(node, "prior_user_messages"),
+                    expectNode == null || expectNode.isNull() ? ConstraintCompileExpect.empty() : parseExpect(expectNode)));
+        }
+        return List.copyOf(cases);
+    }
+
+    private static ConstraintCompileExpect parseExpect(JsonNode expect) {
+        return new ConstraintCompileExpect(
+                textOrNull(expect, "task"),
+                expect.has("score") && !expect.get("score").isNull() ? expect.get("score").asInt() : null,
+                textOrNull(expect, "subject_group"),
+                readStringList(expect, "provinces"),
+                expect.path("provinces_exact").asBoolean(false),
+                readStringList(expect, "exclude_school"),
+                readStringList(expect, "exclude_major"),
+                readStringList(expect, "include_major"),
+                readStringList(expect, "include_major_discipline_groups"),
+                readStringList(expect, "include_discipline_categories"),
+                readStringList(expect, "preferences"),
+                readStringList(expect, "needs_clarification"),
+                readStringList(expect, "unsupported_constraints"),
+                expect.has("blocks_mcp") && !expect.get("blocks_mcp").isNull()
+                        ? expect.get("blocks_mcp").asBoolean()
+                        : null);
+    }
+
     public static Path projectRoot() {
         return Path.of(System.getProperty("user.dir"));
     }
@@ -87,5 +135,47 @@ public final class EvalCaseLoader {
             boolean requirePolicySources,
             boolean requireClarification,
             long maxLatencyMs) {
+    }
+
+    public record ConstraintCompileCase(
+            String id,
+            String input,
+            List<String> priorUserMessagesNewestFirst,
+            ConstraintCompileExpect expect) {
+    }
+
+    public record ConstraintCompileExpect(
+            String task,
+            Integer score,
+            String subjectGroup,
+            List<String> provinces,
+            boolean provincesExact,
+            List<String> excludeSchool,
+            List<String> excludeMajor,
+            List<String> includeMajor,
+            List<String> includeMajorDisciplineGroups,
+            List<String> includeDisciplineCategories,
+            List<String> preferences,
+            List<String> needsClarification,
+            List<String> unsupportedConstraints,
+            Boolean blocksMcp) {
+
+        static ConstraintCompileExpect empty() {
+            return new ConstraintCompileExpect(
+                    null,
+                    null,
+                    null,
+                    List.of(),
+                    false,
+                    List.of(),
+                    List.of(),
+                    List.of(),
+                    List.of(),
+                    List.of(),
+                    List.of(),
+                    List.of(),
+                    List.of(),
+                    null);
+        }
     }
 }

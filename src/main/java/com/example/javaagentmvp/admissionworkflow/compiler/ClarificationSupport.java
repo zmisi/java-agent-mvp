@@ -6,9 +6,10 @@ import java.util.Map;
 public final class ClarificationSupport {
 
     private static final Map<String, String> FIELD_PROMPTS = Map.of(
-            "score", "高考分数",
+            "score", "高考分数或排名位次",
             "provinces", "意向省份（或区域，如长三角）",
-            "subject_group", "高考科类（物理类/历史类）");
+            "subject_group", "高考科类（物理类/历史类）",
+            MajorCategoryClarificationSupport.FIELD, MajorCategoryClarificationSupport.FIELD_PROMPT);
 
     private ClarificationSupport() {
     }

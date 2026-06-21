@@ -1,15 +1,16 @@
 package com.example.javaagentmvp;
 
 import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionQueryContext;
+import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionForcedMcpContext;
 import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionQueryIr;
 import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionSlotsIr;
 import com.example.javaagentmvp.admissionworkflow.filter.MajorScoreFilter;
 import com.example.javaagentmvp.admissionworkflow.filter.QueryConstraints;
 import com.example.javaagentmvp.admissionworkflow.format.RankResponseFormatter;
 import com.example.javaagentmvp.admissionworkflow.format.RankSubjectGroupResolver;
+import com.example.javaagentmvp.admissionworkflow.format.ScoreToRankResolver;
 import com.example.javaagentmvp.admissionworkflow.intent.AdmissionInputParser;
 import com.example.javaagentmvp.admissionworkflow.intent.AdmissionQueryHints;
-import com.example.javaagentmvp.admissionworkflow.intent.ResolvedTurnContext;
 import com.example.javaagentmvp.chat.ChatTurnFlowLog;
 import com.example.javaagentmvp.chat.ui.McpTableContext;
 import com.example.javaagentmvp.chat.ui.McpRankContext;
@@ -44,35 +45,69 @@ public final class McpTableCapturingToolCallback implements ToolCallback {
     private static final String TIER_SAFE = "保";
 
     private final ToolCallback delegate;
+    private final ToolCallback rankDelegate;
+    private final ToolCallback majorByRankDelegate;
     private final McpTableExtractor mcpTableExtractor;
     private final ObjectMapper objectMapper;
 
     private McpTableCapturingToolCallback(
             ToolCallback delegate,
             McpTableExtractor mcpTableExtractor,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            ToolCallback rankDelegate,
+            ToolCallback majorByRankDelegate) {
         this.delegate = delegate;
         this.mcpTableExtractor = mcpTableExtractor;
         this.objectMapper = objectMapper;
+        this.rankDelegate = rankDelegate;
+        this.majorByRankDelegate = majorByRankDelegate;
     }
 
     public static ToolCallback wrap(
             ToolCallback delegate,
             McpTableExtractor mcpTableExtractor,
             ObjectMapper objectMapper) {
+        return wrap(delegate, mcpTableExtractor, objectMapper, null, null);
+    }
+
+    public static ToolCallback wrap(
+            ToolCallback delegate,
+            McpTableExtractor mcpTableExtractor,
+            ObjectMapper objectMapper,
+            ToolCallback rankDelegate,
+            ToolCallback majorByRankDelegate) {
         if (delegate instanceof McpTableCapturingToolCallback) {
             return delegate;
         }
-        return new McpTableCapturingToolCallback(delegate, mcpTableExtractor, objectMapper);
+        return new McpTableCapturingToolCallback(
+                delegate, mcpTableExtractor, objectMapper, rankDelegate, majorByRankDelegate);
     }
 
     public static List<ToolCallback> wrapAll(
             List<ToolCallback> callbacks,
             McpTableExtractor mcpTableExtractor,
             ObjectMapper objectMapper) {
+        ToolCallback rankDelegate = findRawCallback(callbacks, "getRankByScore");
+        ToolCallback majorByRankDelegate = findRawCallback(callbacks, "getMajorByRank");
         return callbacks.stream()
-                .map(callback -> wrap(callback, mcpTableExtractor, objectMapper))
+                .map(callback -> {
+                    if (isGetMajorByScoreName(callback.getToolDefinition().name())) {
+                        return wrap(callback, mcpTableExtractor, objectMapper, rankDelegate, majorByRankDelegate);
+                    }
+                    return wrap(callback, mcpTableExtractor, objectMapper);
+                })
                 .toList();
+    }
+
+    private static ToolCallback findRawCallback(List<ToolCallback> callbacks, String fragment) {
+        return callbacks.stream()
+                .filter(callback -> callback.getToolDefinition().name().contains(fragment))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private static boolean isGetMajorByScoreName(String toolName) {
+        return toolName != null && toolName.contains("getMajorByScore") && !toolName.contains("getMajorByRank");
     }
 
     @Override
@@ -96,6 +131,9 @@ public final class McpTableCapturingToolCallback implements ToolCallback {
         if (isGetRankByScore(toolName)) {
             return handleGetRankByScore(toolInput, toolContext);
         }
+        if (isGetMajorByRank(toolName)) {
+            return handleGetMajorByRank(toolInput, toolContext);
+        }
         if (!isGetMajorByScore(toolName)) {
             String responseData = delegate.call(toolInput, toolContext);
             mcpTableExtractor.extract(toolName, toolInput, responseData).ifPresent(McpTableContext::add);
@@ -106,6 +144,9 @@ public final class McpTableCapturingToolCallback implements ToolCallback {
     }
 
     private String handleGetRankByScore(String toolInput, ToolContext toolContext) {
+        if (AdmissionForcedMcpContext.isPreExecuted()) {
+            return reusePreExecutedResponse(toolInput, toolContext);
+        }
         Optional<AdmissionQueryIr> queryOpt = AdmissionQueryContext.current();
         AdmissionSlotsIr slots = queryOpt.map(AdmissionQueryIr::slots).orElse(null);
         Integer score = resolveRankScore(toolInput, toolContext);
@@ -215,46 +256,389 @@ public final class McpTableCapturingToolCallback implements ToolCallback {
         });
     }
 
+    private String handleGetMajorByRank(String toolInput, ToolContext toolContext) {
+        if (AdmissionForcedMcpContext.isPreExecuted()) {
+            return reusePreExecutedResponse(toolInput, toolContext);
+        }
+        Optional<AdmissionQueryIr> queryOpt = AdmissionQueryContext.current();
+        AdmissionSlotsIr slots = queryOpt.map(AdmissionQueryIr::slots).orElse(null);
+        Integer userRank = resolveUserRank(toolInput, toolContext);
+        if (userRank == null) {
+            String responseData = delegate.call(toolInput, toolContext);
+            captureMajorByRankTierTables(toolInput, responseData);
+            return responseData;
+        }
+
+        List<String> provinces = resolveProvinces(toolInput, slots);
+        if (provinces.isEmpty()) {
+            logMcpStep("single-province rank=%s provinces=from-tool", userRank);
+            String enriched = enrichRankMajorToolInput(toolInput, userRank, parseProvince(toolInput), slots);
+            String responseData = delegate.call(enriched, toolContext);
+            return finalizeMajorByRankResponse(enriched, responseData, queryOpt);
+        }
+        if (provinces.size() == 1) {
+            logMcpStep(
+                    "single-province rank=%s province=%s subject=%s",
+                    userRank,
+                    provinces.get(0),
+                    slots == null ? null : slots.subjectGroup());
+            String enriched = enrichRankMajorToolInput(toolInput, userRank, provinces.get(0), slots);
+            String responseData = delegate.call(enriched, toolContext);
+            return finalizeMajorByRankResponse(enriched, responseData, queryOpt);
+        }
+
+        logMcpStep(
+                "multi-province rank=%s provinces=%s subject=%s",
+                userRank,
+                provinces,
+                slots == null ? null : slots.subjectGroup());
+        return executeMultiProvinceMajorByRankQuery(toolInput, toolContext, userRank, provinces, slots, queryOpt);
+    }
+
+    private String executeMultiProvinceMajorByRankQuery(
+            String toolInput,
+            ToolContext toolContext,
+            int userRank,
+            List<String> provinces,
+            AdmissionSlotsIr slots,
+            Optional<AdmissionQueryIr> queryOpt) {
+        ArrayNode allMajors = objectMapper.createArrayNode();
+        ObjectNode mergedByTier = objectMapper.createObjectNode();
+        mergedByTier.set(TIER_REACH, objectMapper.createArrayNode());
+        mergedByTier.set(TIER_STEADY, objectMapper.createArrayNode());
+        mergedByTier.set(TIER_SAFE, objectMapper.createArrayNode());
+        String referenceInput = toolInput;
+
+        for (String province : provinces) {
+            String enrichedInput = enrichRankMajorToolInput(toolInput, userRank, province, slots);
+            referenceInput = enrichedInput;
+            String responseData = delegate.call(enrichedInput, toolContext);
+            JsonNode root = mcpTableExtractor.parseMajorByScoreRoot(responseData).orElse(null);
+            if (root == null) {
+                continue;
+            }
+            JsonNode majorsNode = root.get("majors");
+            if (majorsNode != null && majorsNode.isArray()) {
+                for (JsonNode major : majorsNode) {
+                    ObjectNode tagged = major.deepCopy();
+                    tagged.put("query_province", province);
+                    allMajors.add(tagged);
+                }
+            }
+            mergeRankTierArrays(mergedByTier, root.get("majors_by_tier"), province);
+        }
+
+        if (allMajors.isEmpty()) {
+            String responseData = delegate.call(toolInput, toolContext);
+            captureMajorByRankTierTables(toolInput, responseData);
+            return responseData;
+        }
+
+        ObjectNode merged = objectMapper.createObjectNode();
+        merged.put("user_rank", userRank);
+        merged.set("majors", allMajors);
+        merged.put("count", allMajors.size());
+        merged.set("majors_by_tier", mergedByTier);
+        ObjectNode tierCounts = objectMapper.createObjectNode();
+        tierCounts.put(TIER_REACH, mergedByTier.get(TIER_REACH).size());
+        tierCounts.put(TIER_STEADY, mergedByTier.get(TIER_STEADY).size());
+        tierCounts.put(TIER_SAFE, mergedByTier.get(TIER_SAFE).size());
+        merged.set("tier_counts", tierCounts);
+        captureMajorByRankTierTables(referenceInput, writeJson(merged));
+        return writeJson(merged);
+    }
+
+    private void mergeRankTierArrays(ObjectNode target, JsonNode sourceByTier, String province) {
+        if (sourceByTier == null || !sourceByTier.isObject()) {
+            return;
+        }
+        for (String tier : List.of(TIER_REACH, TIER_STEADY, TIER_SAFE)) {
+            JsonNode tierMajors = sourceByTier.get(tier);
+            if (tierMajors == null || !tierMajors.isArray()) {
+                continue;
+            }
+            ArrayNode bucket = (ArrayNode) target.get(tier);
+            for (JsonNode major : tierMajors) {
+                ObjectNode tagged = major.deepCopy();
+                tagged.put("query_province", province);
+                bucket.add(tagged);
+            }
+        }
+    }
+
+    private String finalizeMajorByRankResponse(
+            String toolInput,
+            String responseData,
+            Optional<AdmissionQueryIr> queryOpt) {
+        return finalizeMajorByRankResponse(toolInput, responseData, queryOpt, true);
+    }
+
+    private String finalizeMajorByRankResponse(
+            String toolInput,
+            String responseData,
+            Optional<AdmissionQueryIr> queryOpt,
+            boolean captureTierTables) {
+        JsonNode root = mcpTableExtractor.parseMajorByScoreRoot(responseData).orElse(null);
+        if (root == null) {
+            return responseData;
+        }
+        if (captureTierTables) {
+            captureMajorByRankTierTables(toolInput, writeJson(root));
+        }
+        return writeJson(root);
+    }
+
+    private void captureMajorByRankTierTables(String toolInput, String responseData) {
+        JsonNode root = mcpTableExtractor.parseMajorByScoreRoot(responseData).orElse(null);
+        if (root == null) {
+            return;
+        }
+        JsonNode byTier = root.get("majors_by_tier");
+        if (byTier != null && byTier.isObject()) {
+            for (String tier : List.of(TIER_REACH, TIER_STEADY, TIER_SAFE)) {
+                JsonNode majors = byTier.get(tier);
+                if (majors != null && majors.isArray()) {
+                    captureTierTable(toolInput, tier, copyMajorsArray(majors));
+                }
+            }
+            return;
+        }
+        JsonNode majorsNode = root.get("majors");
+        if (majorsNode != null && majorsNode.isArray()) {
+            captureTierTable(toolInput, null, copyMajorsArray(majorsNode));
+        }
+    }
+
+    private ArrayNode copyMajorsArray(JsonNode majorsNode) {
+        return mcpTableExtractor.copyMajorsArray(majorsNode);
+    }
+
+    private String enrichRankMajorToolInput(String toolInput, int rank, String province, AdmissionSlotsIr slots) {
+        try {
+            JsonNode node = objectMapper.readTree(toolInput);
+            ObjectNode updated = node.deepCopy();
+            updated.put("rank", rank);
+            updated.remove("score");
+            if (province != null && !province.isBlank()) {
+                updated.put("province", province);
+            }
+            if (slots != null) {
+                if (slots.subjectGroup() != null && !slots.subjectGroup().isBlank()) {
+                    updated.put("subject_group", slots.subjectGroup());
+                }
+                if (slots.year() != null) {
+                    updated.put("year", slots.year());
+                }
+                if (slots.admissionType() != null && !slots.admissionType().isBlank()) {
+                    updated.put("admission_type", slots.admissionType());
+                }
+            }
+            return objectMapper.writeValueAsString(updated);
+        }
+        catch (Exception ex) {
+            return toolInput;
+        }
+    }
+
+    private Integer resolveUserRank(String toolInput, ToolContext toolContext) {
+        Optional<Integer> fromQuery = AdmissionQueryContext.current()
+                .map(query -> query.slots().rank());
+        if (fromQuery.isPresent()) {
+            return fromQuery.get();
+        }
+        Integer toolRank = parseRank(toolInput);
+        Optional<Integer> parsedFromMessage = parseRankFromUserMessage(toolContext);
+        return parsedFromMessage.orElse(toolRank);
+    }
+
+    private static Optional<Integer> parseRankFromUserMessage(ToolContext toolContext) {
+        if (toolContext == null) {
+            return Optional.empty();
+        }
+        List<Message> history = toolContext.getToolCallHistory();
+        if (history == null || history.isEmpty()) {
+            return Optional.empty();
+        }
+        for (int i = history.size() - 1; i >= 0; i--) {
+            Message message = history.get(i);
+            if (message instanceof UserMessage userMessage) {
+                return AdmissionInputParser.parseRank(userMessage.getText());
+            }
+        }
+        return Optional.empty();
+    }
+
+    private Integer parseRank(String toolInput) {
+        if (toolInput == null || toolInput.isBlank()) {
+            return null;
+        }
+        try {
+            JsonNode node = objectMapper.readTree(toolInput);
+            JsonNode rankNode = node.get("rank");
+            if (rankNode == null || !rankNode.isNumber()) {
+                return null;
+            }
+            return rankNode.intValue();
+        }
+        catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private String writeJson(JsonNode node) {
+        try {
+            return objectMapper.writeValueAsString(node);
+        }
+        catch (Exception ex) {
+            throw new IllegalStateException("Failed to serialize MCP response", ex);
+        }
+    }
+
     private String handleGetMajorByScore(String toolInput, ToolContext toolContext) {
-        String toolName = delegate.getToolDefinition().name();
+        if (AdmissionForcedMcpContext.isPreExecuted()) {
+            return reusePreExecutedResponse(toolInput, toolContext);
+        }
         Integer llmScore = parseScore(toolInput);
         Optional<Integer> baseScoreOpt = resolveUserScore(toolContext, llmScore);
         if (baseScoreOpt.isEmpty()) {
             String responseData = delegate.call(toolInput, toolContext);
-            mcpTableExtractor.extract(toolName, toolInput, responseData).ifPresent(McpTableContext::add);
+            mcpTableExtractor.extract(delegate.getToolDefinition().name(), toolInput, responseData)
+                    .ifPresent(McpTableContext::add);
             return responseData;
         }
 
         int baseScore = baseScoreOpt.get();
-        if (llmScore != null && llmScore != baseScore) {
-            log.info(
-                    "getMajorByScore: using parsed userScore={} (llm passed score={})",
-                    baseScore,
-                    llmScore);
+        if (rankDelegate == null || majorByRankDelegate == null) {
+            log.warn("getMajorByScore: rank/majorByRank delegates unavailable, calling getMajorByScore directly");
+            return delegate.call(toolInput, toolContext);
         }
 
         Optional<AdmissionQueryIr> queryOpt = AdmissionQueryContext.current();
         AdmissionSlotsIr slots = queryOpt.map(AdmissionQueryIr::slots).orElse(null);
         List<String> provinces = resolveProvinces(toolInput, slots);
-        if (provinces.isEmpty()) {
-            logMcpStep("single-province score=%d provinces=from-tool", baseScore);
-            return executeSingleProvinceMajorQuery(toolInput, toolContext, toolName, baseScore, slots, queryOpt);
+        logMcpStep("score-to-rank major score=%d provinces=%s", baseScore, provinces);
+
+        if (provinces.size() <= 1) {
+            String province = provinces.isEmpty() ? parseProvince(toolInput) : provinces.get(0);
+            int rank = resolveRankFromScore(baseScore, province, slots, toolContext);
+            String enriched = enrichRankMajorToolInput(toolInput, rank, province, slots);
+            return invokeMajorByRank(enriched, toolContext, queryOpt, true);
         }
-        if (provinces.size() == 1) {
-            logMcpStep(
-                    "single-province score=%d province=%s subject=%s",
-                    baseScore,
-                    provinces.get(0),
-                    slots == null ? null : slots.subjectGroup());
-            String enrichedInput = enrichToolInput(toolInput, baseScore, provinces.get(0), slots);
-            return executeSingleProvinceMajorQuery(enrichedInput, toolContext, toolName, baseScore, slots, queryOpt);
+        return executeMultiProvinceScoreToRankMajor(
+                toolInput, toolContext, baseScore, provinces, slots, queryOpt);
+    }
+
+    private String executeMultiProvinceScoreToRankMajor(
+            String toolInput,
+            ToolContext toolContext,
+            int baseScore,
+            List<String> provinces,
+            AdmissionSlotsIr slots,
+            Optional<AdmissionQueryIr> queryOpt) {
+        ArrayNode allMajors = objectMapper.createArrayNode();
+        ObjectNode mergedByTier = objectMapper.createObjectNode();
+        mergedByTier.set(TIER_REACH, objectMapper.createArrayNode());
+        mergedByTier.set(TIER_STEADY, objectMapper.createArrayNode());
+        mergedByTier.set(TIER_SAFE, objectMapper.createArrayNode());
+        String referenceInput = toolInput;
+
+        for (String province : provinces) {
+            int rank = resolveRankFromScore(baseScore, province, slots, toolContext);
+            String enriched = enrichRankMajorToolInput(toolInput, rank, province, slots);
+            referenceInput = enriched;
+            String responseData = invokeMajorByRank(enriched, toolContext, queryOpt, false);
+            JsonNode root = mcpTableExtractor.parseMajorByScoreRoot(responseData).orElse(null);
+            if (root == null) {
+                continue;
+            }
+            JsonNode majorsNode = root.get("majors");
+            if (majorsNode != null && majorsNode.isArray()) {
+                for (JsonNode major : majorsNode) {
+                    ObjectNode tagged = major.deepCopy();
+                    tagged.put("query_province", province);
+                    allMajors.add(tagged);
+                }
+            }
+            mergeRankTierArrays(mergedByTier, root.get("majors_by_tier"), province);
         }
-        logMcpStep(
-                "multi-province score=%d provinces=%s subject=%s",
-                baseScore,
-                provinces,
-                slots == null ? null : slots.subjectGroup());
-        return executeMultiProvinceMajorQuery(toolInput, toolContext, toolName, baseScore, provinces, slots, queryOpt);
+
+        if (allMajors.isEmpty()) {
+            return invokeMajorByRank(referenceInput, toolContext, queryOpt, true);
+        }
+
+        ObjectNode merged = objectMapper.createObjectNode();
+        merged.put("user_score", baseScore);
+        merged.set("majors", allMajors);
+        merged.put("count", allMajors.size());
+        merged.set("majors_by_tier", mergedByTier);
+        ObjectNode tierCounts = objectMapper.createObjectNode();
+        tierCounts.put(TIER_REACH, mergedByTier.get(TIER_REACH).size());
+        tierCounts.put(TIER_STEADY, mergedByTier.get(TIER_STEADY).size());
+        tierCounts.put(TIER_SAFE, mergedByTier.get(TIER_SAFE).size());
+        merged.set("tier_counts", tierCounts);
+        captureMajorByRankTierTables(referenceInput, writeJson(merged));
+        return writeJson(merged);
+    }
+
+    private int resolveRankFromScore(
+            int score,
+            String province,
+            AdmissionSlotsIr slots,
+            ToolContext toolContext) {
+        String rankInput = enrichRankToolInput("{}", score, province, slots);
+        String rankResponse = rankDelegate.call(rankInput, toolContext);
+        JsonNode rankRoot = mcpTableExtractor.parseMajorByScoreRoot(rankResponse)
+                .orElseThrow(() -> new IllegalStateException("Invalid getRankByScore response"));
+        return ScoreToRankResolver.resolveRank(
+                        rankRoot,
+                        slots == null ? null : slots.year(),
+                        slots == null ? null : slots.subjectGroup())
+                .orElseThrow(() -> new IllegalStateException(
+                        "无法将 " + score + " 分转换为位次，请补充省份、科类或年份"));
+    }
+
+    private String invokeMajorByRank(
+            String toolInput,
+            ToolContext toolContext,
+            Optional<AdmissionQueryIr> queryOpt) {
+        return invokeMajorByRank(toolInput, toolContext, queryOpt, true);
+    }
+
+    private String invokeMajorByRank(
+            String toolInput,
+            ToolContext toolContext,
+            Optional<AdmissionQueryIr> queryOpt,
+            boolean captureTierTables) {
+        if (AdmissionForcedMcpContext.isPreExecuted()) {
+            return reusePreExecutedResponse(toolInput, toolContext);
+        }
+        Integer userRank = resolveUserRank(toolInput, toolContext);
+        if (userRank == null) {
+            String responseData = majorByRankDelegate.call(toolInput, toolContext);
+            if (captureTierTables) {
+                captureMajorByRankTierTables(toolInput, responseData);
+            }
+            return responseData;
+        }
+        List<String> provinces = resolveMajorRankProvinces(toolInput, queryOpt.map(AdmissionQueryIr::slots).orElse(null));
+        if (provinces.size() <= 1) {
+            String enriched = provinces.isEmpty()
+                    ? enrichRankMajorToolInput(toolInput, userRank, parseProvince(toolInput), null)
+                    : enrichRankMajorToolInput(toolInput, userRank, provinces.get(0), queryOpt.map(AdmissionQueryIr::slots).orElse(null));
+            String responseData = majorByRankDelegate.call(enriched, toolContext);
+            return finalizeMajorByRankResponse(enriched, responseData, queryOpt, captureTierTables);
+        }
+        AdmissionSlotsIr slots = queryOpt.map(AdmissionQueryIr::slots).orElse(null);
+        return executeMultiProvinceMajorByRankQuery(toolInput, toolContext, userRank, provinces, slots, queryOpt);
+    }
+
+    private String reusePreExecutedResponse(String toolInput, ToolContext toolContext) {
+        Optional<String> cached = AdmissionForcedMcpContext.lastToolResponse();
+        if (cached.isPresent()) {
+            log.info("{}: skip duplicate call, MCP pre-executed", delegate.getToolDefinition().name());
+            return cached.get();
+        }
+        return delegate.call(toolInput, toolContext);
     }
 
     private static void logMcpStep(String detailFormat, Object... args) {
@@ -346,19 +730,21 @@ public final class McpTableCapturingToolCallback implements ToolCallback {
             return;
         }
         QueryConstraints constraints = QueryConstraints.fromIr(queryOpt.get(), null);
-        if (!constraints.hasExclusions() && !constraints.hasProvinceFilter()) {
+        if (!needsConstraintFilter(constraints)) {
             return;
         }
         int beforeCount = before == null ? 0 : before.path("majors").size();
         int afterCount = after == null ? 0 : after.path("majors").size();
         ChatTurnFlowLog.step(
                 ChatTurnFlowLog.Step.MCP_PROCESS,
-                "constraints applied before=%d after=%d excludeSchool=%s excludeMajor=%s provinces=%s",
+                "constraints applied before=%d after=%d excludeSchool=%s excludeMajor=%s provinces=%s majorGroups=%s disciplineCategories=%s",
                 beforeCount,
                 afterCount,
                 constraints.excludeSchoolNameContains(),
                 constraints.excludeMajorKeywords(),
-                constraints.provinces());
+                constraints.provinces(),
+                constraints.includeMajorDisciplineGroups(),
+                constraints.includeDisciplineCategories());
     }
 
     private JsonNode applyConstraintsIfNeeded(JsonNode root, int baseScore, Optional<AdmissionQueryIr> queryOpt) {
@@ -366,12 +752,19 @@ public final class McpTableCapturingToolCallback implements ToolCallback {
             return root;
         }
         QueryConstraints constraints = QueryConstraints.fromIr(queryOpt.get(), null);
-        if (!constraints.hasExclusions() && !constraints.hasProvinceFilter()) {
+        if (!needsConstraintFilter(constraints)) {
             return root;
         }
         AdmissionQueryHints.Hints hints = new AdmissionQueryHints.Hints(List.of(), List.of(), false, false);
         MajorScoreFilter.FilterResult filtered = MajorScoreFilter.filter(root, baseScore, hints, constraints, objectMapper);
         return filtered.payload();
+    }
+
+    private static boolean needsConstraintFilter(QueryConstraints constraints) {
+        return constraints.hasExclusions()
+                || constraints.hasProvinceFilter()
+                || constraints.hasMajorCategoryFilter()
+                || (constraints.includeMajorKeywords() != null && !constraints.includeMajorKeywords().isEmpty());
     }
 
     private String buildTieredResponseFromMajors(String userScoreInput, int baseScore, JsonNode majorsNode) {
@@ -380,6 +773,14 @@ public final class McpTableCapturingToolCallback implements ToolCallback {
         captureTierTable(userScoreInput, TIER_STEADY, buckets.steady());
         captureTierTable(userScoreInput, TIER_SAFE, buckets.safe());
         return buildTieredResponse(baseScore, buckets);
+    }
+
+    private List<String> resolveMajorRankProvinces(String toolInput, AdmissionSlotsIr slots) {
+        String toolProvince = parseProvince(toolInput);
+        if (toolProvince != null && !toolProvince.isBlank()) {
+            return List.of(toolProvince);
+        }
+        return resolveProvinces(toolInput, slots);
     }
 
     private List<String> resolveProvinces(String toolInput, AdmissionSlotsIr slots) {
@@ -536,7 +937,11 @@ public final class McpTableCapturingToolCallback implements ToolCallback {
     }
 
     private static boolean isGetMajorByScore(String toolName) {
-        return toolName != null && toolName.contains("getMajorByScore");
+        return toolName != null && toolName.contains("getMajorByScore") && !toolName.contains("getMajorByRank");
+    }
+
+    private static boolean isGetMajorByRank(String toolName) {
+        return toolName != null && toolName.contains("getMajorByRank");
     }
 
     private static boolean isGetRankByScore(String toolName) {
@@ -570,11 +975,6 @@ public final class McpTableCapturingToolCallback implements ToolCallback {
         if (fromQuery.isPresent()) {
             return fromQuery.get();
         }
-        Optional<Integer> resolvedScore = ResolvedTurnContext.current()
-                .map(turn -> turn.slots().score());
-        if (resolvedScore.isPresent()) {
-            return resolvedScore.get();
-        }
         Integer toolScore = parseScore(toolInput);
         Optional<Integer> parsedFromMessage = parseScoreFromUserMessage(toolContext);
         return parsedFromMessage.orElse(toolScore);
@@ -591,12 +991,6 @@ public final class McpTableCapturingToolCallback implements ToolCallback {
             if (provinces.size() == 1) {
                 return provinces.get(0);
             }
-        }
-        Optional<String> resolvedProvince = ResolvedTurnContext.current()
-                .map(turn -> turn.slots().province())
-                .filter(province -> province != null && !province.isBlank());
-        if (resolvedProvince.isPresent()) {
-            return resolvedProvince.get();
         }
         return parseProvinceFromUserMessage(toolContext).orElse(null);
     }
@@ -645,11 +1039,6 @@ public final class McpTableCapturingToolCallback implements ToolCallback {
                 .map(query -> query.slots().score());
         if (fromQuery.isPresent()) {
             return fromQuery;
-        }
-        Optional<Integer> resolvedScore = ResolvedTurnContext.current()
-                .map(turn -> turn.slots().score());
-        if (resolvedScore.isPresent()) {
-            return resolvedScore;
         }
         Optional<Integer> parsedFromMessage = parseScoreFromUserMessage(toolContext);
         if (parsedFromMessage.isPresent()) {

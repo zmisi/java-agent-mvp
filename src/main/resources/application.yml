@@ -24,6 +24,9 @@ app:
         type: mcp
         servers:
           - admission-score
+  university-profile:
+    enabled: true
+    logo-dir: ${UNIVERSITY_LOGO_DIR:./data/chsi/universities/logos}
   agent:
     prompt:
       # System prompt file (Markdown/plain text). Edit without recompiling Java.
@@ -62,9 +65,10 @@ app:
     context-addon: >
       仅当用户消息中已注入知识库检索上下文时，才用这些资料回答招生简章、招生政策、章程规则，
       以及 RAG、Spring AI 或本项目文档类问题。数据库表结构、SQL、统计类问题必须用 MCP 工具查询 PostgreSQL。
-      用高考分数查询可报专业/院校：必须调用 MCP 工具 getMajorByScore（必填 score、province；
-      可选 year、subject_group、campus、admission_type），不要根据知识库片段编造专业列表。
-      只需用用户实际分数调用一次，禁止自行多次调用不同分数；系统按各专业最低分与用户分数比较自动分冲（需+15才够）/稳（分数正好够）/保（-15仍够）三档，客户端固定展示三段表格。
+      用高考分数查询可报专业/院校：先调用 MCP 工具 getRankByScore 将分数转换为省内位次，再调用 getMajorByRank（必填 rank、province；
+      可选 year、subject_group、campus、admission_type），系统按位次梯度分冲/稳/保三档；不要直接调用 getMajorByScore。
+      用户直接给出省内排名位次时：调用 getMajorByRank（必填 rank、province）。
+      只需用用户实际分数或位次调用一次，禁止自行多次调用不同分数/位次；客户端固定展示三段表格。
       查询分数对应的排名或位次：必须调用 MCP 工具 getRankByScore（必填 score；可选 province、year、subject_group），不要根据知识库片段编造位次。返回的位次均来自已导入的省级一分一段表（含 source_url），禁止自行标注「预估」或「建模生成」。
     routing:
       # 命中任一条即跳过 RAG，走 MCP（SQL、getMajorByScore 或 getRankByScore）。优先于 rag-patterns。Java 正则，不区分大小写。
@@ -83,7 +87,9 @@ app:
         - '(多少|几分|考了|高考)\s*\d{3,4}\s*分[\s\S]{0,40}(专业|学校|院校|报|志愿)'
         - '\d{3,4}\s*分[\s\S]{0,40}(排名|位次|名次|排多少|多少位|多少名|排第几)'
         - '(排名|位次|名次|排多少|多少位|多少名|排第几)[\s\S]{0,40}\d{3,4}\s*分'
-        - '(?<!\d)\d{3,4}(?!\d)[\s\S]{0,40}(排名|位次|名次|排多少|多少位|多少名|排第几)'
+        - '(排名|位次|名次|多少位|多少名|排第几)[\s\S]{0,40}(专业|报考|报志愿|志愿|可报|能上|录取|哪些|什么|报什么|能上什么|什么专业|什么学校|哪些学校|院校)'
+        - '(专业|报考|报志愿|志愿|可报|能上|录取|什么专业|哪些专业|什么学校|哪些学校|院校)[\s\S]{0,40}(排名|位次|名次|多少位|多少名|排第几)[\s\S]{0,20}\d+'
+        - '(排名|位次|名次|多少位|多少名|排第几)[\s\S]{0,20}\d+[\s\S]{0,40}(专业|报考|报志愿|志愿|可报|能上|录取|哪些|什么|报什么|能上什么|什么专业|什么学校|哪些学校|院校)'
       # 命中任一条即走 RAG 知识库（招生简章、政策、章程等）。Java 正则，不区分大小写。
       rag-patterns:
         - '\brag\b'
@@ -158,6 +164,7 @@ app:
     base-url: http://localhost:8090
     timeout-ms: 3000
     fallback-to-local: true
+    record-unsupported: true
 
 logging:
   level:
@@ -171,7 +178,7 @@ logging:
     com.example.javaagentmvp.admissionworkflow.tool.AdmissionScoreToolClient: INFO
     com.example.javaagentmvp.admissionworkflow.engine.WorkflowEngine: INFO
     com.example.javaagentmvp.chat.ChatTurnFlowLog: INFO
-    com.example.javaagentmvp.chat.ResolvedTurnAdvisor: INFO
+    com.example.javaagentmvp.chat.AdmissionQueryAdvisor: INFO
     com.example.javaagentmvp.admissionworkflow.compiler.AdmissionQueryCompileService: INFO
     com.example.javaagentmvp.McpTableCapturingToolCallback: INFO
     com.example.javaagentmvp.QwenApiLoggingAdvisor: INFO

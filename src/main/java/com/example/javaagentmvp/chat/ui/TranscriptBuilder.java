@@ -13,10 +13,17 @@ public final class TranscriptBuilder {
 
     private final McpTableExtractor mcpTableExtractor;
     private final ObjectMapper objectMapper;
+    private final ChatTableEnrichmentService tableEnrichmentService;
 
-    public TranscriptBuilder(McpTableExtractor mcpTableExtractor, ObjectMapper objectMapper) {
+    public TranscriptBuilder(
+            McpTableExtractor mcpTableExtractor,
+            ObjectMapper objectMapper,
+            ChatTableEnrichmentService tableEnrichmentService) {
         this.mcpTableExtractor = mcpTableExtractor;
         this.objectMapper = objectMapper;
+        this.tableEnrichmentService = tableEnrichmentService == null
+                ? ChatTableEnrichmentService.noop()
+                : tableEnrichmentService;
     }
 
     public List<TranscriptRow> build(List<ChatMemoryMessageRow> rows) {
@@ -56,7 +63,7 @@ public final class TranscriptBuilder {
                         row.createdAt(),
                         row.role(),
                         row.text(),
-                        ChatTableGrouper.enrichTables(tables)));
+                        tableEnrichmentService.enrichTables(tables)));
             }
         }
         return transcript;

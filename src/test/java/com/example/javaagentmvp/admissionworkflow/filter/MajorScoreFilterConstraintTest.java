@@ -31,8 +31,9 @@ class MajorScoreFilterConstraintTest {
             """;
         AdmissionQueryIr query = new AdmissionQueryIr(
                 "search_majors",
-                new AdmissionSlotsIr(620, List.of("江苏", "浙江", "上海"), "物理类", null, null),
-                new AdmissionFiltersIr(List.of("师范"), List.of("师范", "教育学"), List.of(), List.of()),
+                new AdmissionSlotsIr(620, null, List.of("江苏", "浙江", "上海"), "物理类", null, null),
+                new AdmissionFiltersIr(List.of("师范"), List.of("师范", "教育学"), List.of(), List.of(), List.of(), List.of()),
+                List.of(),
                 List.of(),
                 List.of(),
                 List.of(),

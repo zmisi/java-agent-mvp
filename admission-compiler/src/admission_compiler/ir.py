@@ -33,10 +33,13 @@ class Filters(BaseModel):
     exclude_major_keywords: list[str] = Field(default_factory=list)
     include_major_keywords: list[str] = Field(default_factory=list)
     include_schools: list[str] = Field(default_factory=list)
+    include_major_discipline_groups: list[str] = Field(default_factory=list)
+    include_discipline_categories: list[str] = Field(default_factory=list)
 
 
 class Slots(BaseModel):
     score: int | None = Field(default=None, ge=200, le=750)
+    rank: int | None = Field(default=None, ge=1)
     provinces: list[str] = Field(default_factory=list)
     subject_group: str | None = None
     year: int | None = Field(default=None, ge=2020, le=2030)
@@ -54,6 +57,12 @@ class ParseTrace(BaseModel):
     llm_used: bool = False
 
 
+class UnsupportedConstraint(BaseModel):
+    raw_phrase: str
+    constraint_type: str
+    reason: str = "no_data"
+
+
 class AdmissionQuery(BaseModel):
     """Structured compile result for one user turn."""
 
@@ -62,6 +71,7 @@ class AdmissionQuery(BaseModel):
     filters: Filters = Field(default_factory=Filters)
     preferences: list[Preference] = Field(default_factory=list)
     regions: list[RegionRef] = Field(default_factory=list)
+    unsupported_constraints: list[UnsupportedConstraint] = Field(default_factory=list)
     needs_clarification: list[str] = Field(default_factory=list)
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     raw_message: str = ""

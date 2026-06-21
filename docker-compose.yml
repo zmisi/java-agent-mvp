@@ -34,6 +34,8 @@ services:
         BASE_IMAGE: m.daocloud.io/docker.io/python:3.12-slim
     environment:
       DATABASE_URL: postgresql://agent:agent@postgres:5432/employees
+    volumes:
+      - chsi-university-logos:/app/data/chsi/universities/logos
     depends_on:
       postgres:
         condition: service_healthy
@@ -41,8 +43,8 @@ services:
 
   admission-compiler:
     build:
-      context: ./admission-compiler
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: admission-compiler/Dockerfile
     ports:
       - "8090:8090"
     healthcheck:
@@ -74,6 +76,8 @@ services:
       APP_ADMISSION_COMPILER_BASE_URL: http://admission-compiler:8090
     env_file:
       - .env
+    volumes:
+      - chsi-university-logos:/app/data/chsi/universities/logos:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -102,3 +106,6 @@ services:
       - "host.docker.internal:host-gateway"
     volumes:
       - ./docker/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+volumes:
+  chsi-university-logos:

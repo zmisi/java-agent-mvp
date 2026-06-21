@@ -69,7 +69,7 @@ public class ChatController {
 
         String message = body.message().strip();
         try {
-            ChatReplyDto reply = chatTurnService.execute(conversationId, message);
+            ChatReplyDto reply = chatTurnService.execute(conversationId, message, user.userId());
             turnSummaryBuffer.appendTurn(conversationId, message, reply.assistant());
             touchConversation(conversationId, message, user);
             return reply;

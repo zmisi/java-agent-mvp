@@ -3,6 +3,7 @@ package com.example.javaagentmvp.chat;
 import com.example.javaagentmvp.chat.persistence.mapper.ChatMemoryMessageMapper;
 import com.example.javaagentmvp.chat.persistence.model.ChatMemoryMessageRow;
 import com.example.javaagentmvp.chat.ui.ChatTable;
+import com.example.javaagentmvp.chat.ui.ChatTableEnrichmentService;
 import com.example.javaagentmvp.chat.ui.McpTableExtractor;
 import com.example.javaagentmvp.chat.ui.TranscriptBuilder;
 import com.example.javaagentmvp.chat.ui.UiTableCodec;
@@ -35,10 +36,11 @@ public final class PostgresChatMemory implements ChatMemory {
             ChatMemoryMessageMapper chatMemoryMessageMapper,
             ObjectMapper objectMapper,
             McpTableExtractor mcpTableExtractor,
+            ChatTableEnrichmentService tableEnrichmentService,
             int maxMessages) {
         this.chatMemoryMessageMapper = chatMemoryMessageMapper;
         this.objectMapper = objectMapper;
-        this.transcriptBuilder = new TranscriptBuilder(mcpTableExtractor, objectMapper);
+        this.transcriptBuilder = new TranscriptBuilder(mcpTableExtractor, objectMapper, tableEnrichmentService);
         this.maxMessages = maxMessages;
     }
 

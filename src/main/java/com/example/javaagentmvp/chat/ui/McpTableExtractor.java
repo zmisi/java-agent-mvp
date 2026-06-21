@@ -4,6 +4,7 @@ import com.example.javaagentmvp.admissionworkflow.format.RankResponseFormatter;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -34,9 +35,19 @@ public class McpTableExtractor {
             new ChatTableColumn("source_label", "数据来源"));
 
     private final ObjectMapper objectMapper;
+    private final ChatTableEnrichmentService tableEnrichmentService;
 
+    /** Test/manual construction without Spring context. */
     public McpTableExtractor(ObjectMapper objectMapper) {
+        this(objectMapper, ChatTableEnrichmentService.noop());
+    }
+
+    @Autowired
+    public McpTableExtractor(ObjectMapper objectMapper, ChatTableEnrichmentService tableEnrichmentService) {
         this.objectMapper = objectMapper;
+        this.tableEnrichmentService = tableEnrichmentService == null
+                ? ChatTableEnrichmentService.noop()
+                : tableEnrichmentService;
     }
 
     public Optional<ChatTable> extract(String toolName, String toolInput, String responseData) {
@@ -48,7 +59,9 @@ public class McpTableExtractor {
             return Optional.empty();
         }
         String payload = unwrapToolPayload(responseData);
-        if (matchesTool(toolName, "getMajorByScore") || hasMajorByScorePayload(payload)) {
+        if (matchesTool(toolName, "getMajorByScore")
+                || matchesTool(toolName, "getMajorByRank")
+                || hasMajorByScorePayload(payload)) {
             return extractMajorByScore(toolInput, payload, tierLabel);
         }
         return Optional.empty();
@@ -226,7 +239,7 @@ public class McpTableExtractor {
             rows.add(row);
         }
         ChatTable table = new ChatTable(buildMajorByScoreTitle(toolInput, tierLabel), MAJOR_BY_SCORE_COLUMNS, rows);
-        return Optional.of(ChatTableGrouper.withGroups(table));
+        return Optional.of(tableEnrichmentService.enrichTable(table));
     }
 
     public ArrayNode copyMajorsArray(JsonNode majorsNode) {
@@ -240,6 +253,9 @@ public class McpTableExtractor {
     private String buildMajorByScoreTitle(String toolInput, String tierLabel) {
         JsonNode args = parseJson(toolInput);
         List<String> parts = new ArrayList<>();
+        if (args.has("rank")) {
+            parts.add("排名" + stripTrailingZeros(args.get("rank").asText()) + "名");
+        }
         if (args.has("score")) {
             parts.add(stripTrailingZeros(args.get("score").asText()) + "分");
         }

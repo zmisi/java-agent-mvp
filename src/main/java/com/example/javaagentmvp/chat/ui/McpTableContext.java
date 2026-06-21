@@ -27,4 +27,15 @@ public final class McpTableContext {
     public static void clear() {
         TABLES.remove();
     }
+
+    /** Removes the last {@code count} tables (e.g. rank-tier tables before score-tier fallback). */
+    public static void removeLastTables(int count) {
+        if (count <= 0) {
+            return;
+        }
+        List<ChatTable> tables = TABLES.get();
+        for (int i = 0; i < count && !tables.isEmpty(); i++) {
+            tables.remove(tables.size() - 1);
+        }
+    }
 }

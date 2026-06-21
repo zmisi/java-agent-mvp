@@ -4,7 +4,7 @@ import com.example.javaagentmvp.admissionworkflow.engine.WorkflowContext;
 import com.example.javaagentmvp.admissionworkflow.engine.WorkflowNode;
 import com.example.javaagentmvp.admissionworkflow.engine.WorkflowNodeResult;
 import com.example.javaagentmvp.admissionworkflow.intent.AdmissionIntent;
-import com.example.javaagentmvp.admissionworkflow.intent.AdmissionIntentClassifier;
+import com.example.javaagentmvp.admissionworkflow.intent.PolicyKeywordSupport;
 import com.example.javaagentmvp.admissionworkflow.intent.AdmissionQueryHints;
 import com.example.javaagentmvp.admissionworkflow.policy.PolicySourceSelector;
 import com.example.javaagentmvp.rag.RagProperties;
@@ -24,15 +24,12 @@ public class PolicyRagNode implements WorkflowNode {
     public static final String KEY_POLICY_SOURCES = "policySources";
 
     private final ObjectProvider<RagRetrievalService> ragRetrievalService;
-    private final AdmissionIntentClassifier intentClassifier;
     private final RagProperties ragProperties;
 
     public PolicyRagNode(
             ObjectProvider<RagRetrievalService> ragRetrievalService,
-            AdmissionIntentClassifier intentClassifier,
             RagProperties ragProperties) {
         this.ragRetrievalService = ragRetrievalService;
-        this.intentClassifier = intentClassifier;
         this.ragProperties = ragProperties;
     }
 
@@ -47,8 +44,9 @@ public class PolicyRagNode implements WorkflowNode {
             return WorkflowNodeResult.skipped("awaiting clarification");
         }
 
-        AdmissionIntent intent = context.get(IntentClassifyNode.KEY_INTENT, AdmissionIntent.class);
-        if (intent == AdmissionIntent.SCORE && !intentClassifier.hasPolicyKeywords(context.inputMessage())) {
+        AdmissionIntent intent = context.get(CompileQueryNode.KEY_INTENT, AdmissionIntent.class);
+        if (intent == AdmissionIntent.SCORE
+                && !PolicyKeywordSupport.hasPolicyKeywords(context.inputMessage(), ragProperties)) {
             return WorkflowNodeResult.skipped("score-only intent");
         }
         if (intent == AdmissionIntent.RANK) {

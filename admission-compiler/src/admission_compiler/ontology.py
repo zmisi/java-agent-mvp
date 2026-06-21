@@ -7,7 +7,7 @@ from pathlib import Path
 
 import yaml
 
-from admission_compiler.ir import Filters, Preference, PreferenceDimension, RegionRef
+from admission_compiler.ir import Filters, Preference, PreferenceDimension, RegionRef, UnsupportedConstraint
 
 
 @dataclass
@@ -15,9 +15,15 @@ class Ontology:
     regions: dict[str, list[str]] = field(default_factory=dict)
     exclusions: dict[str, dict[str, list[str]]] = field(default_factory=dict)
     preference_phrases: dict[str, tuple[PreferenceDimension, list[str]]] = field(default_factory=dict)
+    unsupported_signals: dict[str, tuple[str, str, list[str]]] = field(default_factory=dict)
+    major_category_filters: dict[str, tuple[list[str], list[str], list[str]]] = field(default_factory=dict)
 
 
 def default_ontology_dir() -> Path:
+    repo_root = Path(__file__).resolve().parents[3]
+    shared = repo_root / "src" / "main" / "resources" / "admission-ontology"
+    if shared.is_dir():
+        return shared
     return Path(__file__).resolve().parents[2] / "ontology"
 
 
@@ -26,10 +32,14 @@ def load_ontology(ontology_dir: Path | None = None) -> Ontology:
     regions = _load_regions(base / "regions.yaml")
     exclusions = _load_exclusions(base / "exclusions.yaml")
     preference_phrases = _load_preferences(base / "preferences.yaml")
+    unsupported_signals = _load_unsupported_signals(base / "unsupported_signals.yaml")
+    major_category_filters = _load_major_category_filters(base / "major_category_filters.yaml")
     return Ontology(
         regions=regions,
         exclusions=exclusions,
         preference_phrases=preference_phrases,
+        unsupported_signals=unsupported_signals,
+        major_category_filters=major_category_filters,
     )
 
 
@@ -126,3 +136,75 @@ def match_preferences(message: str, ontology: Ontology) -> tuple[list[Preference
             pref.weight = weight
 
     return preferences, hits
+
+
+def _load_unsupported_signals(path: Path) -> dict[str, tuple[str, str, list[str]]]:
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    out: dict[str, tuple[str, str, list[str]]] = {}
+    for phrase, body in (data.get("unsupported_signals") or {}).items():
+        if not isinstance(body, dict):
+            continue
+        constraint_type = str(body.get("constraint_type") or "unknown")
+        reason = str(body.get("reason") or "no_data")
+        aliases = [str(a) for a in (body.get("aliases") or [])]
+        out[str(phrase)] = (constraint_type, reason, aliases)
+    return out
+
+
+def match_unsupported_constraints(message: str, ontology: Ontology) -> list[UnsupportedConstraint]:
+    matched: list[UnsupportedConstraint] = []
+    seen_types: set[str] = set()
+    candidates: list[tuple[str, str, str]] = []
+    for phrase, (constraint_type, reason, aliases) in ontology.unsupported_signals.items():
+        candidates.append((phrase, constraint_type, reason))
+        for alias in aliases:
+            candidates.append((alias, constraint_type, reason))
+
+    for phrase, constraint_type, reason in sorted(candidates, key=lambda x: len(x[0]), reverse=True):
+        if phrase not in message or constraint_type in seen_types:
+            continue
+        seen_types.add(constraint_type)
+        matched.append(
+            UnsupportedConstraint(raw_phrase=phrase, constraint_type=constraint_type, reason=reason)
+        )
+    return matched
+
+
+def match_major_category_filters(message: str, ontology: Ontology) -> tuple[list[str], list[str], list[str]]:
+    groups: list[str] = []
+    categories: list[str] = []
+    hits: list[str] = []
+    seen_keys: set[str] = set()
+    candidates: list[tuple[str, str, list[str], list[str]]] = []
+    for key, (discipline_groups, discipline_categories, aliases) in ontology.major_category_filters.items():
+        candidates.append((key, key, discipline_groups, discipline_categories))
+        for alias in aliases:
+            candidates.append((alias, key, discipline_groups, discipline_categories))
+
+    for phrase, key, discipline_groups, discipline_categories in sorted(
+        candidates, key=lambda x: len(x[0]), reverse=True
+    ):
+        if phrase not in message or key in seen_keys:
+            continue
+        seen_keys.add(key)
+        hits.append(phrase)
+        for group in discipline_groups:
+            if group not in groups:
+                groups.append(group)
+        for category in discipline_categories:
+            if category not in categories:
+                categories.append(category)
+    return groups, categories, hits
+
+
+def _load_major_category_filters(path: Path) -> dict[str, tuple[list[str], list[str], list[str]]]:
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    out: dict[str, tuple[list[str], list[str], list[str]]] = {}
+    for phrase, body in (data.get("major_category_filters") or {}).items():
+        if not isinstance(body, dict):
+            continue
+        groups = [str(g) for g in (body.get("discipline_groups") or [])]
+        categories = [str(c) for c in (body.get("discipline_categories") or [])]
+        aliases = [str(a) for a in (body.get("aliases") or [])]
+        out[str(phrase)] = (groups, categories, aliases)
+    return out

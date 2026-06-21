@@ -4,6 +4,7 @@ import com.example.javaagentmvp.admissionworkflow.engine.WorkflowContext;
 import com.example.javaagentmvp.admissionworkflow.engine.WorkflowNode;
 import com.example.javaagentmvp.admissionworkflow.engine.WorkflowNodeResult;
 import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionQueryIr;
+import com.example.javaagentmvp.admissionworkflow.compiler.UnsupportedConstraintAckSupport;
 import com.example.javaagentmvp.admissionworkflow.filter.QueryConstraints;
 import com.example.javaagentmvp.admissionworkflow.intent.AdmissionIntent;
 import com.example.javaagentmvp.admissionworkflow.intent.AdmissionQueryHints;
@@ -11,6 +12,7 @@ import com.example.javaagentmvp.rag.RagSource;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,11 +33,12 @@ public class FormatResponseNode implements WorkflowNode {
     public WorkflowNodeResult execute(WorkflowContext context) {
         String clarification = context.get(CompileQueryNode.KEY_CLARIFICATION_MESSAGE, String.class);
         if (clarification != null && !clarification.isBlank()) {
+            AdmissionQueryIr query = context.get(CompileQueryNode.KEY_ADMISSION_QUERY, AdmissionQueryIr.class);
+            clarification = UnsupportedConstraintAckSupport.prependAcknowledgement(query, clarification);
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("intent", AdmissionIntent.SCORE.name());
             result.put("summary", clarification);
             result.put("needsClarification", true);
-            AdmissionQueryIr query = context.get(CompileQueryNode.KEY_ADMISSION_QUERY, AdmissionQueryIr.class);
             if (query != null) {
                 result.put("admissionQuery", query);
                 result.put("clarificationFields", query.needsClarification());
@@ -44,7 +47,7 @@ public class FormatResponseNode implements WorkflowNode {
             return WorkflowNodeResult.succeeded(Map.of("summary", clarification, "needsClarification", true));
         }
 
-        AdmissionIntent intent = context.get(IntentClassifyNode.KEY_INTENT, AdmissionIntent.class);
+        AdmissionIntent intent = context.get(CompileQueryNode.KEY_INTENT, AdmissionIntent.class);
         JsonNode rawScoreResult = context.get(ScoreToolNode.KEY_SCORE_RESULT, JsonNode.class);
         JsonNode scoreResult = context.get(FilterScoreMajorsNode.KEY_FILTERED_SCORE_RESULT, JsonNode.class);
         if (scoreResult == null) {
@@ -61,7 +64,9 @@ public class FormatResponseNode implements WorkflowNode {
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("intent", intent == null ? AdmissionIntent.UNKNOWN.name() : intent.name());
-        result.put("summary", buildSummary(intent, scoreResult, rawScoreResult, rankResult, policySources, hints));
+        AdmissionQueryIr query = context.get(CompileQueryNode.KEY_ADMISSION_QUERY, AdmissionQueryIr.class);
+        String summary = buildSummary(intent, scoreResult, rawScoreResult, rankResult, policySources, hints);
+        result.put("summary", UnsupportedConstraintAckSupport.prependAcknowledgement(query, summary));
         if (scoreResult != null) {
             result.put("scoreResult", scoreResult);
         }
@@ -120,7 +125,28 @@ public class FormatResponseNode implements WorkflowNode {
         if (count <= 0) {
             return "未能查询到该分数对应的位次，请补充省份、科类或年份。";
         }
+        List<String> provinces = distinctRankProvinces(rankResult);
+        if (provinces.size() > 1) {
+            return "已查询到 " + count + " 条位次记录（"
+                    + String.join("、", provinces)
+                    + "），详见 rankResult。";
+        }
         return "已查询到 " + count + " 条位次记录，详见 rankResult。";
+    }
+
+    private static List<String> distinctRankProvinces(JsonNode rankResult) {
+        JsonNode ranks = rankResult.path("ranks");
+        if (!ranks.isArray()) {
+            return List.of();
+        }
+        List<String> provinces = new ArrayList<>();
+        for (JsonNode row : ranks) {
+            String province = row.path("province").asText("").strip();
+            if (!province.isBlank() && !provinces.contains(province)) {
+                provinces.add(province);
+            }
+        }
+        return provinces;
     }
 
     private static int rankCount(JsonNode rankResult) {

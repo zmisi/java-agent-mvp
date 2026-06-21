@@ -44,7 +44,7 @@ public class ScoreToolNode implements WorkflowNode {
             return WorkflowNodeResult.skipped("awaiting clarification");
         }
 
-        AdmissionIntent intent = context.get(IntentClassifyNode.KEY_INTENT, AdmissionIntent.class);
+        AdmissionIntent intent = context.get(CompileQueryNode.KEY_INTENT, AdmissionIntent.class);
         if (intent == AdmissionIntent.POLICY) {
             return WorkflowNodeResult.skipped("policy-only intent");
         }
@@ -67,13 +67,21 @@ public class ScoreToolNode implements WorkflowNode {
             List<String> provinces = provincesForQuery(slots);
             List<JsonNode> provinceResults = new ArrayList<>();
             for (String province : provinces) {
-                JsonNode result = admissionScoreToolClient.getMajorByScore(
-                        context.runId(),
-                        slots.score(),
-                        province,
-                        slots.subjectGroup(),
-                        slots.year(),
-                        slots.admissionType());
+                JsonNode result = slots.rank() != null
+                        ? admissionScoreToolClient.getMajorByRank(
+                                context.runId(),
+                                slots.rank(),
+                                province,
+                                slots.subjectGroup(),
+                                slots.year(),
+                                slots.admissionType())
+                        : admissionScoreToolClient.getMajorsForScore(
+                                context.runId(),
+                                slots.score(),
+                                province,
+                                slots.subjectGroup(),
+                                slots.year(),
+                                slots.admissionType());
                 provinceResults.add(tagProvince(result, province));
             }
             JsonNode merged = mergeScoreResults(provinceResults);
@@ -81,8 +89,12 @@ public class ScoreToolNode implements WorkflowNode {
             int count = merged.path("count").asInt(merged.path("majors").size());
             return WorkflowNodeResult.succeeded(Map.of(
                     "count", count,
-                    "score", slots.score(),
-                    "mcpQueryScore", AdmissionScoreToolClient.mcpQueryScore(slots.score()),
+                    "score", slots.score() == null ? "" : slots.score(),
+                    "rank", merged.path("user_rank").isMissingNode()
+                            ? (slots.rank() == null ? "" : slots.rank())
+                            : merged.path("user_rank").asInt(),
+                    "resolvedRank", merged.path("resolved_rank").asText(""),
+                    "mcpQueryScore", "",
                     "provinces", provinces,
                     "subjectGroup", slots.subjectGroup() == null ? "" : slots.subjectGroup(),
                     "year", slots.year() == null ? "" : slots.year(),
@@ -100,18 +112,34 @@ public class ScoreToolNode implements WorkflowNode {
         }
 
         try {
-            JsonNode result = admissionScoreToolClient.getRankByScore(
-                    context.runId(),
-                    slots.score(),
-                    slots.primaryProvince(),
-                    slots.subjectGroup(),
-                    slots.year());
+            List<String> provinces = provincesForQuery(slots);
+            JsonNode result;
+            if (provinces.isEmpty()) {
+                result = admissionScoreToolClient.getRankByScore(
+                        context.runId(),
+                        slots.score(),
+                        null,
+                        slots.subjectGroup(),
+                        slots.year());
+            }
+            else {
+                List<JsonNode> provinceResults = new ArrayList<>();
+                for (String province : provinces) {
+                    provinceResults.add(admissionScoreToolClient.getRankByScore(
+                            context.runId(),
+                            slots.score(),
+                            province,
+                            slots.subjectGroup(),
+                            slots.year()));
+                }
+                result = mergeRankResults(provinceResults);
+            }
             context.put(KEY_RANK_RESULT, result);
             int count = result.path("count").asInt(result.path("ranks").size());
             return WorkflowNodeResult.succeeded(Map.of(
                     "count", count,
                     "score", slots.score(),
-                    "province", slots.primaryProvince() == null ? "" : slots.primaryProvince(),
+                    "provinces", provinces,
                     "subjectGroup", slots.subjectGroup() == null ? "" : slots.subjectGroup(),
                     "year", slots.year() == null ? "" : slots.year()));
         }
@@ -129,6 +157,7 @@ public class ScoreToolNode implements WorkflowNode {
         List<String> provinces = parsed.province() == null ? List.of() : List.of(parsed.province());
         return new AdmissionSlotsIr(
                 parsed.score(),
+                parsed.rank(),
                 provinces,
                 parsed.subjectGroup(),
                 parsed.year(),
@@ -146,7 +175,7 @@ public class ScoreToolNode implements WorkflowNode {
     }
 
     private static String describeMissingFields(AdmissionSlotsIr slots) {
-        if (slots.score() == null) {
+        if (!slots.hasScoreOrRank()) {
             return "score";
         }
         if (slots.provincesOrEmpty().isEmpty()) {
@@ -186,9 +215,29 @@ public class ScoreToolNode implements WorkflowNode {
         merged.set("majors", majors);
         if (!provinceResults.isEmpty()) {
             merged.put("user_score", provinceResults.get(0).path("user_score").asInt());
+            if (provinceResults.get(0).has("resolved_rank")) {
+                merged.put("resolved_rank", provinceResults.get(0).path("resolved_rank").asInt());
+            }
+            if (provinceResults.get(0).has("user_rank")) {
+                merged.put("user_rank", provinceResults.get(0).path("user_rank").asInt());
+            }
             merged.put("tier_delta", provinceResults.get(0).path("tier_delta").asInt());
             merged.put("mcp_query_score", provinceResults.get(0).path("mcp_query_score").asInt());
         }
+        return merged;
+    }
+
+    private JsonNode mergeRankResults(List<JsonNode> provinceResults) {
+        ObjectNode merged = objectMapper.createObjectNode();
+        ArrayNode ranks = objectMapper.createArrayNode();
+        for (JsonNode provinceResult : provinceResults) {
+            JsonNode ranksNode = provinceResult.path("ranks");
+            if (ranksNode.isArray()) {
+                ranksNode.forEach(ranks::add);
+            }
+        }
+        merged.put("count", ranks.size());
+        merged.set("ranks", ranks);
         return merged;
     }
 }

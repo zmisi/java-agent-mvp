@@ -2,11 +2,8 @@ package com.example.javaagentmvp.rag;
 
 import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionQueryContext;
 import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionQueryIr;
-import com.example.javaagentmvp.admissionworkflow.intent.ConversationTurnResolver;
 import com.example.javaagentmvp.admissionworkflow.planner.QueryPlanner;
 import com.example.javaagentmvp.chat.ChatTurnFlowLog;
-import com.example.javaagentmvp.admissionworkflow.intent.ResolvedTurn;
-import com.example.javaagentmvp.admissionworkflow.intent.ResolvedTurnContext;
 import com.example.javaagentmvp.chat.UserTurnContextExtractor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,25 +31,20 @@ public class RagFlowStartAdvisor implements CallAdvisor {
 
     private final RagQueryRouter ragQueryRouter;
 
-    private final ConversationTurnResolver turnResolver;
-
     private final int order;
 
     public RagFlowStartAdvisor(
             RagRetrievalService ragRetrievalService,
-            RagQueryRouter ragQueryRouter,
-            ConversationTurnResolver turnResolver) {
-        this(ragRetrievalService, ragQueryRouter, turnResolver, RagAdvisorOrder.FLOW_START);
+            RagQueryRouter ragQueryRouter) {
+        this(ragRetrievalService, ragQueryRouter, RagAdvisorOrder.FLOW_START);
     }
 
     public RagFlowStartAdvisor(
             RagRetrievalService ragRetrievalService,
             RagQueryRouter ragQueryRouter,
-            ConversationTurnResolver turnResolver,
             int order) {
         this.ragRetrievalService = ragRetrievalService;
         this.ragQueryRouter = ragQueryRouter;
-        this.turnResolver = turnResolver;
         this.order = order;
     }
 
@@ -63,13 +55,10 @@ public class RagFlowStartAdvisor implements CallAdvisor {
         UserTurnContextExtractor.UserTurnContext userTurnContext = UserTurnContextExtractor.extract(request);
         String userMessage = userTurnContext.currentUserMessage();
 
-        ResolvedTurn resolved = ResolvedTurnContext.current()
-                .orElseGet(() -> turnResolver.resolve(
-                        userMessage,
-                        userTurnContext.priorUserMessages(),
-                        userTurnContext.priorContextHints()));
+        AdmissionQueryIr query = AdmissionQueryContext.current()
+                .orElse(AdmissionQueryIr.empty(userMessage));
 
-        RagQueryRouter.Decision preliminary = ragQueryRouter.decide(resolved, userMessage);
+        RagQueryRouter.Decision preliminary = ragQueryRouter.decide(query, userMessage);
         if (!preliminary.useRag() && !preliminary.shouldRetrieve()) {
             RagFlowContext.skip(preliminary.reason());
             log.info("========== RAG skipped [{}] — {} ==========", flowId, preliminary.reason());
@@ -80,7 +69,7 @@ public class RagFlowStartAdvisor implements CallAdvisor {
                     ChatTurnFlowLog.Step.RAG_RETRIEVE,
                     "reason=%s intent=%s",
                     preliminary.reason(),
-                    resolved.intent());
+                    query.toIntent());
             return chain.nextCall(request);
         }
 
