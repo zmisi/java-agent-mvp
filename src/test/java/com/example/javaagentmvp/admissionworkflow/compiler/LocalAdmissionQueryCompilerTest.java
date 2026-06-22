@@ -48,9 +48,22 @@ class LocalAdmissionQueryCompilerTest {
                         List.of("招生简章", "招生章程", "政策", "招生计划"),
                         4,
                         12,
-                        List.of(),
+                        List.of(
+                                new com.example.javaagentmvp.rag.RagProperties.School(
+                                        "hfut",
+                                        "合肥工业大学",
+                                        List.of("合工大", "合肥工业大学", "HFUT"),
+                                        List.of())),
                         ""),
                 new com.example.javaagentmvp.rag.RagProperties.Hybrid(false, 2, 3, 3, 60, 1.0, 0.9, "auto", "simple"));
+    }
+
+    @Test
+    void compilesIncludeSchoolWhenUniversityNamed() {
+        AdmissionQueryIr query = compiler.compile("631分 安徽 物理类 能报 合肥工业大学 什么专业");
+
+        assertThat(query.filters().includeSchools()).containsExactly("合肥工业大学");
+        assertThat(query.slots().score()).isEqualTo(631);
     }
 
     @Test

@@ -3,7 +3,9 @@ package com.example.javaagentmvp.admissionworkflow.compiler;
 import com.example.javaagentmvp.admissionworkflow.intent.AdmissionInputParser;
 import com.example.javaagentmvp.admissionworkflow.intent.AdmissionIntent;
 import com.example.javaagentmvp.admissionworkflow.intent.AdmissionRankQuery;
+import com.example.javaagentmvp.rag.RagProperties;
 import com.example.javaagentmvp.rag.RagQueryRouter;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -22,14 +24,26 @@ public class LocalAdmissionQueryCompiler {
     private final AdmissionOntologyRegistry ontologyRegistry;
     private final AdmissionPriorSlotsBuilder priorSlotsBuilder;
     private final RagQueryRouter ragQueryRouter;
+    private final RagProperties ragProperties;
 
+    @Autowired
     public LocalAdmissionQueryCompiler(
             AdmissionOntologyRegistry ontologyRegistry,
             AdmissionPriorSlotsBuilder priorSlotsBuilder,
-            RagQueryRouter ragQueryRouter) {
+            RagQueryRouter ragQueryRouter,
+            RagProperties ragProperties) {
         this.ontologyRegistry = ontologyRegistry;
         this.priorSlotsBuilder = priorSlotsBuilder;
         this.ragQueryRouter = ragQueryRouter;
+        this.ragProperties = ragProperties;
+    }
+
+    /** Convenience when only {@link RagQueryRouter} is available (e.g. tests). */
+    LocalAdmissionQueryCompiler(
+            AdmissionOntologyRegistry ontologyRegistry,
+            AdmissionPriorSlotsBuilder priorSlotsBuilder,
+            RagQueryRouter ragQueryRouter) {
+        this(ontologyRegistry, priorSlotsBuilder, ragQueryRouter, ragQueryRouter.properties());
     }
 
     public AdmissionQueryIr compile(String message) {
@@ -125,9 +139,11 @@ public class LocalAdmissionQueryCompiler {
         AdmissionOntologyRegistry.MajorCategoryMatch majorCategory =
                 ontologyRegistry.matchMajorCategoryFilters(normalized);
         AdmissionFiltersIr filters = withMajorCategoryFilters(
-                withIncludeMajors(
-                        ontologyRegistry.matchExclusions(normalized),
-                        AdmissionInputParser.parseIncludeMajorKeywords(normalized)),
+                withIncludeSchools(
+                        withIncludeMajors(
+                                ontologyRegistry.matchExclusions(normalized),
+                                AdmissionInputParser.parseIncludeMajorKeywords(normalized)),
+                        IncludeSchoolSupport.matchIncludeSchools(normalized, ragProperties)),
                 majorCategory);
         List<AdmissionPreferenceIr> preferences = ontologyRegistry.matchPreferences(normalized);
         List<UnsupportedConstraintIr> unsupported = ontologyRegistry.matchUnsupportedConstraints(normalized);
@@ -285,6 +301,19 @@ public class LocalAdmissionQueryCompiler {
                 filters.excludeMajorKeywords(),
                 includeMajors,
                 filters.includeSchools(),
+                filters.includeMajorDisciplineGroups(),
+                filters.includeDisciplineCategories());
+    }
+
+    private static AdmissionFiltersIr withIncludeSchools(AdmissionFiltersIr filters, List<String> includeSchools) {
+        if (includeSchools == null || includeSchools.isEmpty()) {
+            return filters;
+        }
+        return new AdmissionFiltersIr(
+                filters.excludeSchoolNameContains(),
+                filters.excludeMajorKeywords(),
+                filters.includeMajorKeywords(),
+                includeSchools,
                 filters.includeMajorDisciplineGroups(),
                 filters.includeDisciplineCategories());
     }

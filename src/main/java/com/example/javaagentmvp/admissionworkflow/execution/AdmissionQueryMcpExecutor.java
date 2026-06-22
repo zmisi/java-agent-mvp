@@ -4,12 +4,14 @@ import com.example.javaagentmvp.McpTableCapturingToolCallback;
 import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionQueryContext;
 import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionQueryIr;
 import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionSlotsIr;
+import com.example.javaagentmvp.admissionworkflow.filter.MajorTierResultFilter;
 import com.example.javaagentmvp.admissionworkflow.format.ScoreTierMajorSupport;
 import com.example.javaagentmvp.admissionworkflow.format.ScoreToRankResolver;
 import com.example.javaagentmvp.admissionworkflow.intent.AdmissionIntent;
 import com.example.javaagentmvp.chat.ui.McpTableContext;
 import com.example.javaagentmvp.chat.ui.McpTableExtractor;
 import com.example.javaagentmvp.dbagent.DbAgentTargetRegistry;
+import com.example.javaagentmvp.rag.RagProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -35,12 +37,14 @@ public class AdmissionQueryMcpExecutor {
     private final ToolCallback rankToolCallback;
     private final ObjectMapper objectMapper;
     private final McpTableExtractor mcpTableExtractor;
+    private final RagProperties ragProperties;
 
     @Autowired
     public AdmissionQueryMcpExecutor(
             DbAgentTargetRegistry dbAgentTargetRegistry,
             McpTableExtractor mcpTableExtractor,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            RagProperties ragProperties) {
         List<ToolCallback> raw = SyncMcpToolCallbackProvider.syncToolCallbacks(dbAgentTargetRegistry.chatMcpClients());
         List<ToolCallback> wrapped = wrapCallbacks(raw, mcpTableExtractor, objectMapper);
         this.majorByRankToolCallback = findTool(wrapped, "getMajorByRank");
@@ -48,19 +52,22 @@ public class AdmissionQueryMcpExecutor {
         this.rankToolCallback = findTool(wrapped, "getRankByScore");
         this.objectMapper = objectMapper;
         this.mcpTableExtractor = mcpTableExtractor;
+        this.ragProperties = ragProperties;
     }
 
     AdmissionQueryMcpExecutor(
-            ToolCallback majorByRankToolCallback,
             ToolCallback majorByScoreRawCallback,
+            ToolCallback majorByRankToolCallback,
             ToolCallback rankToolCallback,
             ObjectMapper objectMapper,
-            McpTableExtractor mcpTableExtractor) {
+            McpTableExtractor mcpTableExtractor,
+            RagProperties ragProperties) {
         this.majorByRankToolCallback = majorByRankToolCallback;
         this.majorByScoreRawCallback = majorByScoreRawCallback;
         this.rankToolCallback = rankToolCallback;
         this.objectMapper = objectMapper;
         this.mcpTableExtractor = mcpTableExtractor;
+        this.ragProperties = ragProperties == null ? emptyRagProperties() : ragProperties;
     }
 
     /** Backward-compatible test constructor. */
@@ -70,11 +77,12 @@ public class AdmissionQueryMcpExecutor {
             ToolCallback rankToolCallback,
             ObjectMapper objectMapper) {
         this(
-                majorByRankToolCallback,
                 majorByScoreRawCallback,
+                majorByRankToolCallback,
                 rankToolCallback,
                 objectMapper,
-                new McpTableExtractor(objectMapper));
+                new McpTableExtractor(objectMapper),
+                emptyRagProperties());
     }
 
     private static List<ToolCallback> wrapCallbacks(
@@ -153,13 +161,68 @@ public class AdmissionQueryMcpExecutor {
             String province,
             String majorByRankResponse) {
         JsonNode root = mcpTableExtractor.parseMajorByScoreRoot(majorByRankResponse).orElse(null);
-        if (!shouldFallbackToScoreTiers(query, root)) {
-            return majorByRankResponse;
+        String response = majorByRankResponse;
+        if (shouldFallbackToScoreTiers(query, root)) {
+            response = fallbackToScoreTiers(query, resolvedRank, province, root).orElse(majorByRankResponse);
+            root = mcpTableExtractor.parseMajorByScoreRoot(response).orElse(root);
         }
-        return fallbackToScoreTiers(query, resolvedRank, province, root).orElse(majorByRankResponse);
+        return applyIncludeFilters(query, resolvedRank, province, root, response, 3);
+    }
+
+    private String applyIncludeFilters(
+            AdmissionQueryIr query,
+            int resolvedRank,
+            String province,
+            JsonNode root,
+            String originalResponse,
+            int tierTablesToReplace) {
+        if (root == null || !MajorTierResultFilter.needsFiltering(query, ragProperties)) {
+            return originalResponse;
+        }
+        ObjectNode filtered = MajorTierResultFilter.filter(root, query, ragProperties, objectMapper);
+        String tierTableInput = query.slots().score() != null
+                ? buildScoreTierTableInput(query, province)
+                : buildMajorByRankInput(query, resolvedRank, province);
+        if (tierTablesToReplace > 0) {
+            McpTableContext.removeLastTables(tierTablesToReplace);
+        }
+        ScoreTierMajorSupport.captureScoreTierTables(tierTableInput, filtered, mcpTableExtractor);
+        log.info(
+                "AdmissionQueryMcpExecutor: include filters schools={} majors={} tierCounts=冲{} 稳{} 保{}",
+                query.filters().includeSchools(),
+                query.filters().includeMajorKeywords(),
+                filtered.path("tier_counts").path("冲").asInt(0),
+                filtered.path("tier_counts").path("稳").asInt(0),
+                filtered.path("tier_counts").path("保").asInt(0));
+        try {
+            return objectMapper.writeValueAsString(filtered);
+        }
+        catch (Exception ex) {
+            throw new IllegalStateException("Failed to serialize filtered tier response", ex);
+        }
+    }
+
+    private static RagProperties emptyRagProperties() {
+        return new RagProperties(
+                false,
+                false,
+                false,
+                "agent_ui",
+                "rag_vector_store",
+                "",
+                4,
+                0.7,
+                false,
+                "",
+                new RagProperties.Routing(List.of(), List.of()),
+                new RagProperties.Admissions(false, List.of(), 4, 12, List.of(), ""),
+                new RagProperties.Hybrid(false, 2, 3, 3, 60, 1.0, 0.9, "auto", "simple"));
     }
 
     private boolean shouldFallbackToScoreTiers(AdmissionQueryIr query, JsonNode rankRoot) {
+        if (MajorTierResultFilter.needsFiltering(query, ragProperties)) {
+            return false;
+        }
         return query.slots().score() != null && ScoreTierMajorSupport.isSparseRankResult(rankRoot);
     }
 
@@ -274,7 +337,15 @@ public class AdmissionQueryMcpExecutor {
         tierCounts.put("保", mergedByTier.get("保").size());
         merged.set("tier_counts", tierCounts);
         try {
-            return objectMapper.writeValueAsString(merged);
+            String mergedJson = objectMapper.writeValueAsString(merged);
+            int rank = resolveRankFromScore(query, provinces.get(0));
+            return applyIncludeFilters(
+                    query,
+                    rank,
+                    provinces.get(0),
+                    merged,
+                    mergedJson,
+                    provinces.size() * 3);
         }
         catch (Exception ex) {
             throw new IllegalStateException("Failed to merge multi-province rank-major response", ex);

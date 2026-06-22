@@ -4,6 +4,7 @@ import com.example.javaagentmvp.McpTableCapturingToolCallback;
 import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionFiltersIr;
 import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionQueryIr;
 import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionSlotsIr;
+import com.example.javaagentmvp.rag.RagProperties;
 import com.example.javaagentmvp.chat.ui.McpTableContext;
 import com.example.javaagentmvp.chat.ui.McpTableExtractor;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -155,6 +156,109 @@ class AdmissionQueryMcpExecutorTest {
         assertThat(payload.path("tier_counts").path("保").asInt()).isEqualTo(1);
         assertThat(McpTableContext.tables()).hasSize(4);
         assertThat(McpTableContext.tables().get(1).title()).startsWith("冲（631分");
+    }
+
+    @Test
+    void filtersMajorTiersToIncludeSchool() throws Exception {
+        ToolCallback rank = new ToolCallback() {
+            @Override
+            public ToolDefinition getToolDefinition() {
+                return ToolDefinition.builder().name("getRankByScore").description("test").inputSchema("{}").build();
+            }
+
+            @Override
+            public ToolMetadata getToolMetadata() {
+                return ToolMetadata.builder().build();
+            }
+
+            @Override
+            public String call(String toolInput) {
+                return "{\"count\":1,\"ranks\":[{\"year\":2025,\"province\":\"安徽\",\"subject_group\":\"物理类\","
+                        + "\"score\":631,\"rank_min\":9967,\"rank_max\":10374}]}";
+            }
+        };
+        ToolCallback majorByRank = new ToolCallback() {
+            @Override
+            public ToolDefinition getToolDefinition() {
+                return ToolDefinition.builder().name("getMajorByRank").description("test").inputSchema("{}").build();
+            }
+
+            @Override
+            public ToolMetadata getToolMetadata() {
+                return ToolMetadata.builder().build();
+            }
+
+            @Override
+            public String call(String toolInput) {
+                return "{\"user_rank\":9967,"
+                        + "\"tier_counts\":{\"冲\":1,\"稳\":2,\"保\":1},"
+                        + "\"majors_by_tier\":{"
+                        + "\"冲\":[{\"university_name\":\"合肥工业大学\",\"major_name\":\"冲高\"}],"
+                        + "\"稳\":["
+                        + "{\"university_name\":\"合肥工业大学\",\"major_name\":\"稳妥\"},"
+                        + "{\"university_name\":\"安徽大学\",\"major_name\":\"法学\"}],"
+                        + "\"保\":[{\"university_name\":\"安徽医科大学\",\"major_name\":\"临床\"}]"
+                        + "},\"majors\":[]}";
+            }
+        };
+
+        AdmissionQueryIr query = new AdmissionQueryIr(
+                "search_majors",
+                new AdmissionSlotsIr(631, null, List.of("安徽"), "物理类", null, null),
+                new AdmissionFiltersIr(
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of("合肥工业大学"),
+                        List.of(),
+                        List.of()),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                0.9,
+                "631分 安徽 物理类 能报 合肥工业大学 什么专业",
+                null);
+
+        AdmissionQueryMcpExecutor executor = new AdmissionQueryMcpExecutor(
+                stubTool("getMajorByScore", "{}"),
+                McpTableCapturingToolCallback.wrap(majorByRank, extractor, objectMapper),
+                McpTableCapturingToolCallback.wrap(rank, extractor, objectMapper),
+                objectMapper,
+                extractor,
+                hfutRagProperties());
+
+        AdmissionQueryMcpExecutor.ExecutionResult result = executor.execute(query);
+
+        assertThat(result.success()).isTrue();
+        JsonNode payload = objectMapper.readTree(result.toolResponse());
+        assertThat(payload.path("tier_counts").path("稳").asInt()).isEqualTo(1);
+        assertThat(payload.path("majors_by_tier").path("稳").get(0).path("university_name").asText())
+                .isEqualTo("合肥工业大学");
+        assertThat(payload.path("tier_counts").path("保").asInt()).isEqualTo(0);
+    }
+
+    private static RagProperties hfutRagProperties() {
+        return new RagProperties(
+                true,
+                false,
+                false,
+                "agent_ui",
+                "rag_vector_store",
+                "",
+                4,
+                0.7,
+                false,
+                "",
+                new RagProperties.Routing(List.of(), List.of()),
+                new RagProperties.Admissions(
+                        true,
+                        List.of(),
+                        4,
+                        12,
+                        List.of(new RagProperties.School("hfut", "合肥工业大学", List.of("合工大"), List.of())),
+                        ""),
+                new RagProperties.Hybrid(false, 2, 3, 3, 60, 1.0, 0.9, "auto", "simple"));
     }
 
     @Test

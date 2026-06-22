@@ -34,6 +34,10 @@ public class RagQueryRouter {
                 ragPatterns.size(), databasePatterns.size());
     }
 
+    public RagProperties properties() {
+        return ragProperties;
+    }
+
     public Decision decide(String message) {
         String normalized = message == null ? "" : message.strip();
         AdmissionIntent intent = MultiturnIntentSupport.classifyExplicitIntent(normalized);
