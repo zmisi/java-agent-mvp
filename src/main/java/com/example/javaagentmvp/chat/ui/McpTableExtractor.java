@@ -19,6 +19,7 @@ public class McpTableExtractor {
     private static final List<ChatTableColumn> MAJOR_BY_SCORE_COLUMNS = List.of(
             new ChatTableColumn("university_name", "院校"),
             new ChatTableColumn("major_name", "专业"),
+            new ChatTableColumn("plan_count", "计划数"),
             new ChatTableColumn("campus", "校区"),
             new ChatTableColumn("min_score", "最低分"),
             new ChatTableColumn("min_rank", "最低位次"),

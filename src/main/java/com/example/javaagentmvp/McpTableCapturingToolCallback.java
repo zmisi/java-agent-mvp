@@ -1,5 +1,6 @@
 package com.example.javaagentmvp;
 
+import com.example.javaagentmvp.admissionworkflow.DefaultAdmissionYear;
 import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionQueryContext;
 import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionForcedMcpContext;
 import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionQueryIr;
@@ -426,13 +427,11 @@ public final class McpTableCapturingToolCallback implements ToolCallback {
                 if (slots.subjectGroup() != null && !slots.subjectGroup().isBlank()) {
                     updated.put("subject_group", slots.subjectGroup());
                 }
-                if (slots.year() != null) {
-                    updated.put("year", slots.year());
-                }
                 if (slots.admissionType() != null && !slots.admissionType().isBlank()) {
                     updated.put("admission_type", slots.admissionType());
                 }
             }
+            updated.put("year", DefaultAdmissionYear.resolve(slots != null ? slots.year() : null));
             return objectMapper.writeValueAsString(updated);
         }
         catch (Exception ex) {
@@ -591,7 +590,7 @@ public final class McpTableCapturingToolCallback implements ToolCallback {
                 .orElseThrow(() -> new IllegalStateException("Invalid getRankByScore response"));
         return ScoreToRankResolver.resolveRank(
                         rankRoot,
-                        slots == null ? null : slots.year(),
+                        DefaultAdmissionYear.resolve(slots != null ? slots.year() : null),
                         slots == null ? null : slots.subjectGroup())
                 .orElseThrow(() -> new IllegalStateException(
                         "无法将 " + score + " 分转换为位次，请补充省份、科类或年份"));
@@ -806,13 +805,11 @@ public final class McpTableCapturingToolCallback implements ToolCallback {
                 if (slots.subjectGroup() != null && !slots.subjectGroup().isBlank()) {
                     updated.put("subject_group", slots.subjectGroup());
                 }
-                if (slots.year() != null) {
-                    updated.put("year", slots.year());
-                }
                 if (slots.admissionType() != null && !slots.admissionType().isBlank()) {
                     updated.put("admission_type", slots.admissionType());
                 }
             }
+            updated.put("year", DefaultAdmissionYear.resolve(slots != null ? slots.year() : null));
             return objectMapper.writeValueAsString(updated);
         }
         catch (Exception ex) {
@@ -837,13 +834,11 @@ public final class McpTableCapturingToolCallback implements ToolCallback {
                 updated.put("subject_group", rankSubjectGroup);
             }
             if (slots != null) {
-                if (slots.year() != null) {
-                    updated.put("year", slots.year());
-                }
                 if (slots.admissionType() != null && !slots.admissionType().isBlank()) {
                     updated.put("admission_type", slots.admissionType());
                 }
             }
+            updated.put("year", DefaultAdmissionYear.resolve(slots != null ? slots.year() : null));
             return objectMapper.writeValueAsString(updated);
         }
         catch (Exception ex) {

@@ -93,6 +93,19 @@ class LocalAdmissionQueryCompilerTest {
     }
 
     @Test
+    void compilesBareRankSuffixForMajorSearch() {
+        AdmissionQueryIr query = compiler.compile("安徽 物理 100000名 普通批 可以报考什么学校专业？");
+
+        assertThat(query.task()).isEqualTo("search_majors");
+        assertThat(query.slots().rank()).isEqualTo(100000);
+        assertThat(query.slots().score()).isNull();
+        assertThat(query.slots().provincesOrEmpty()).containsExactly("安徽");
+        assertThat(query.slots().subjectGroup()).isEqualTo("物理类");
+        assertThat(query.slots().admissionType()).isEqualTo("普通批");
+        assertThat(query.needsClarification()).isEmpty();
+    }
+
+    @Test
     void compilesYangtzeDeltaExclusionAndUnsupportedEmploymentSignals() {
         AdmissionQueryIr query = compiler.compile(
                 "我要报考长三角的大学，不当老师，就业前景比较好，收入比较高，能进央国企");

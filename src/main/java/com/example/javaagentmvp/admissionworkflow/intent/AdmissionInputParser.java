@@ -17,11 +17,12 @@ public final class AdmissionInputParser {
 
     private static final Pattern SCORE_WITH_FEN_PATTERN = Pattern.compile("(?<!\\d)(\\d{3,4})\\s*分");
     private static final Pattern BARE_NUMBER_PATTERN = Pattern.compile("(?<!\\d)(\\d{3,4})(?!\\d)");
-    private static final Pattern RANK_WITH_MING_PATTERN = Pattern.compile("排名\\s*(\\d+)\\s*名");
-    private static final Pattern RANK_DEDI_PATTERN = Pattern.compile("第\\s*(\\d+)\\s*名");
-    private static final Pattern RANK_WEICI_PATTERN = Pattern.compile("位次\\s*(\\d+)");
-    private static final Pattern RANK_WEI_PATTERN = Pattern.compile("(\\d+)\\s*位(?!次)");
-    private static final Pattern RANK_MING_PATTERN = Pattern.compile("(\\d+)\\s*名");
+    private static final String RANK_NUMBER = "(\\d+(?:,\\d+)*\\s*万|\\d+(?:,\\d+)*)";
+    private static final Pattern RANK_WITH_MING_PATTERN = Pattern.compile("排名\\s*" + RANK_NUMBER + "\\s*名");
+    private static final Pattern RANK_DEDI_PATTERN = Pattern.compile("第\\s*" + RANK_NUMBER + "\\s*名");
+    private static final Pattern RANK_WEICI_PATTERN = Pattern.compile("位次\\s*" + RANK_NUMBER);
+    private static final Pattern RANK_WEI_PATTERN = Pattern.compile(RANK_NUMBER + "\\s*位(?!次)");
+    private static final Pattern RANK_MING_PATTERN = Pattern.compile(RANK_NUMBER + "\\s*名");
     private static final Pattern RANK_HINT_PATTERN =
             Pattern.compile("排名|位次|名次|排多少|多少位|多少名|排第几");
     private static final Pattern PROVINCE_PATTERN = Pattern.compile(
@@ -69,27 +70,26 @@ public final class AdmissionInputParser {
 
         Matcher rankWithMing = RANK_WITH_MING_PATTERN.matcher(message);
         if (rankWithMing.find()) {
-            return Optional.of(parsePositiveInt(rankWithMing.group(1)));
+            return Optional.of(parseRankNumber(rankWithMing.group(1)));
         }
         Matcher rankDedi = RANK_DEDI_PATTERN.matcher(message);
         if (rankDedi.find()) {
-            return Optional.of(parsePositiveInt(rankDedi.group(1)));
+            return Optional.of(parseRankNumber(rankDedi.group(1)));
         }
         Matcher rankWeici = RANK_WEICI_PATTERN.matcher(message);
         if (rankWeici.find()) {
-            return Optional.of(parsePositiveInt(rankWeici.group(1)));
+            return Optional.of(parseRankNumber(rankWeici.group(1)));
         }
         Matcher rankWei = RANK_WEI_PATTERN.matcher(message);
         if (rankWei.find()) {
-            return Optional.of(parsePositiveInt(rankWei.group(1)));
+            return Optional.of(parseRankNumber(rankWei.group(1)));
+        }
+        Matcher rankMing = RANK_MING_PATTERN.matcher(message);
+        if (rankMing.find()) {
+            return Optional.of(parseRankNumber(rankMing.group(1)));
         }
 
         boolean hasRankHint = RANK_HINT_PATTERN.matcher(message).find();
-        Matcher rankMing = RANK_MING_PATTERN.matcher(message);
-        if (rankMing.find() && hasRankHint) {
-            return Optional.of(parsePositiveInt(rankMing.group(1)));
-        }
-
         Set<Integer> yearValues = collectYearValues(message);
         Matcher matcher = BARE_NUMBER_PATTERN.matcher(message);
         Integer lastPlausibleRank = null;
@@ -200,6 +200,19 @@ public final class AdmissionInputParser {
             matched.remove("计算机");
         }
         return List.copyOf(matched);
+    }
+
+    private static int parseRankNumber(String text) {
+        String normalized = text.strip().replace(" ", "");
+        if (normalized.endsWith("万")) {
+            String numPart = normalized.substring(0, normalized.length() - 1).replace(",", "");
+            long rank = Math.round(Double.parseDouble(numPart) * 10_000L);
+            if (rank < 1 || rank > Integer.MAX_VALUE) {
+                throw new NumberFormatException("rank out of range: " + text);
+            }
+            return (int) rank;
+        }
+        return Integer.parseInt(normalized.replace(",", ""));
     }
 
     private static int parsePositiveInt(String text) {

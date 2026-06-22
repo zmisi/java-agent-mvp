@@ -38,6 +38,14 @@ class ChatTableGrouperTest {
     }
 
     @Test
+    void groupMajorRowsPreservesPlanCount() {
+        Map<String, String> row = row("HFUT", "合肥工业大学", "软件工程", "628");
+        row.put("plan_count", "24");
+        List<ChatTableGroup> groups = ChatTableGrouper.groupMajorRows(List.of(row));
+        assertEquals("24", groups.get(0).majors().get(0).get("plan_count"));
+    }
+
+    @Test
     void withGroupsAddsGroupsToTableWithoutMutatingExistingGroups() {
         List<Map<String, String>> rows = List.of(row("AHU", "安徽大学", "法学", "615"));
         ChatTable grouped = ChatTableGrouper.withGroups(new ChatTable("冲", List.of(), rows));

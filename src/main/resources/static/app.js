@@ -996,6 +996,7 @@ const COLUMN_LAYOUT = {
   [INDEX_COLUMN_KEY]: { minWidthPx: 36, align: "center", wrap: false },
   university_name: { minWidthPx: 84, align: "left", wrap: false },
   major_name: { minWidthPx: 120, align: "left", wrap: true },
+  plan_count: { minWidthPx: 48, align: "left", wrap: false },
   campus: { minWidthPx: 64, align: "left", wrap: false },
   min_score: { minWidthPx: 48, align: "left", wrap: false },
   min_rank: { minWidthPx: 56, align: "left", wrap: false },

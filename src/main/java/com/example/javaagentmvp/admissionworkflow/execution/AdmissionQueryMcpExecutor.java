@@ -1,6 +1,7 @@
 package com.example.javaagentmvp.admissionworkflow.execution;
 
 import com.example.javaagentmvp.McpTableCapturingToolCallback;
+import com.example.javaagentmvp.admissionworkflow.DefaultAdmissionYear;
 import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionQueryContext;
 import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionQueryIr;
 import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionSlotsIr;
@@ -375,7 +376,10 @@ public class AdmissionQueryMcpExecutor {
         JsonNode rankRoot = mcpTableExtractor.parseMajorByScoreRoot(rankResponse)
                 .orElseThrow(() -> new IllegalStateException("Invalid getRankByScore response"));
         AdmissionSlotsIr slots = query.slots();
-        return ScoreToRankResolver.resolveRank(rankRoot, slots.year(), slots.subjectGroup())
+        return ScoreToRankResolver.resolveRank(
+                        rankRoot,
+                        DefaultAdmissionYear.resolve(slots.year()),
+                        slots.subjectGroup())
                 .orElseThrow(() -> new IllegalStateException(
                         "无法将 " + slots.score() + " 分转换为位次，请补充省份、科类或年份"));
     }
@@ -444,9 +448,7 @@ public class AdmissionQueryMcpExecutor {
         if (slots.subjectGroup() != null && !slots.subjectGroup().isBlank()) {
             args.put("subject_group", slots.subjectGroup());
         }
-        if (slots.year() != null) {
-            args.put("year", slots.year());
-        }
+        args.put("year", DefaultAdmissionYear.resolve(slots.year()));
         if (slots.admissionType() != null && !slots.admissionType().isBlank()) {
             args.put("admission_type", slots.admissionType());
         }

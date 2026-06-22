@@ -1,5 +1,6 @@
 package com.example.javaagentmvp.admissionworkflow.compiler;
 
+import com.example.javaagentmvp.admissionworkflow.DefaultAdmissionYear;
 import com.example.javaagentmvp.admissionworkflow.intent.AdmissionIntent;
 import com.example.javaagentmvp.admissionworkflow.format.RankSubjectGroupResolver;
 
@@ -52,7 +53,7 @@ public final class AdmissionQueryPromptFormatter {
             sb.append("- 省份: （未指定）\n");
         }
         appendSlot(sb, "科类", formatRankSubjectGroup(slots, intent));
-        appendSlot(sb, "年份", slots.year() != null ? String.valueOf(slots.year()) : null);
+        appendSlot(sb, "年份", String.valueOf(DefaultAdmissionYear.resolve(slots.year())));
         appendSlot(sb, "批次", slots.admissionType());
 
         if (!query.regions().isEmpty()) {

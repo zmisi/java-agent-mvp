@@ -39,7 +39,7 @@ public class LocalAdmissionQueryCompiler {
     }
 
     /** Convenience when only {@link RagQueryRouter} is available (e.g. tests). */
-    LocalAdmissionQueryCompiler(
+    public LocalAdmissionQueryCompiler(
             AdmissionOntologyRegistry ontologyRegistry,
             AdmissionPriorSlotsBuilder priorSlotsBuilder,
             RagQueryRouter ragQueryRouter) {

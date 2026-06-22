@@ -2,6 +2,9 @@
 {"id":"yangtze-complex-preferences","input":"我要报考长三角的大学，不当老师，就业前景比较好，收入比较高，能进央国企","expect":{"task":"search_majors","provinces":["江苏","浙江","上海"],"exclude_school":["师范"],"unsupported_constraints":["employment_data","salary_data","state_owned_employability"],"needs_clarification":["score","subject_group"]}}
 {"id":"score-anhui-620","input":"安徽物理类620分能上什么专业","expect":{"task":"search_majors","score":620,"provinces":["安徽"],"subject_group":"物理类","needs_clarification":[]}}
 {"id":"rank-anhui-10000-majors","input":"排名10000名 安徽 物理类 能报什么专业","expect":{"task":"search_majors","rank":10000,"provinces":["安徽"],"subject_group":"物理类","needs_clarification":[]}}
+{"id":"rank-anhui-100000-bare","input":"安徽 物理 100000名 普通批 可以报考什么学校专业？","expect":{"task":"search_majors","rank":100000,"provinces":["安徽"],"subject_group":"物理类","needs_clarification":[]}}
+{"id":"rank-anhui-100000-comma","input":"安徽 物理 100,000名 普通批 可以报考什么学校专业？","expect":{"task":"search_majors","rank":100000,"provinces":["安徽"],"subject_group":"物理类","needs_clarification":[]}}
+{"id":"rank-anhui-100000-wan","input":"安徽 物理 10万名 普通批 可以报考什么学校专业？","expect":{"task":"search_majors","rank":100000,"provinces":["安徽"],"subject_group":"物理类","needs_clarification":[]}}
 {"id":"rank-anhui-620","input":"安徽物理类620分排名多少","expect":{"task":"search_rank","score":620,"provinces":["安徽"],"subject_group":"物理类"}}
 {"id":"policy-charter","input":"合工大2025年招生章程录取规则是什么","expect":{"task":"policy_qa"}}
 {"id":"report-mixed","input":"安徽物理类620分，合工大计算机和软件工程政策","expect":{"task":"report","score":620,"provinces":["安徽"]}}

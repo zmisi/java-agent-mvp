@@ -10,6 +10,7 @@ public final class ChatTableGrouper {
 
     private static final List<String> MAJOR_FIELD_KEYS = List.of(
             "major_name",
+            "plan_count",
             "campus",
             "min_score",
             "min_rank",

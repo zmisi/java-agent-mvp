@@ -64,6 +64,22 @@ class ScoreToolNodeTest {
     }
 
     @Test
+    void rankQueryDefaultsYearWhenOmittedInIr() {
+        when(admissionScoreToolClient.getRankByScore(anyString(), anyInt(), any(), any(), any()))
+                .thenReturn(rankResult("安徽", "物理类"));
+
+        WorkflowContext context = rankContext(
+                "run-3",
+                new AdmissionSlotsIr(620, null, List.of(), "物理类", null, null));
+
+        WorkflowNodeResult result = scoreToolNode.execute(context);
+
+        assertThat(result.status().name()).isEqualTo("SUCCEEDED");
+        verify(admissionScoreToolClient).getRankByScore("run-3", 620, null, "物理类", 2025);
+        assertThat(result.output().get("year")).isEqualTo(2025);
+    }
+
+    @Test
     void rankQueryUsesSingleCallWhenNoProvincesInIr() {
         when(admissionScoreToolClient.getRankByScore(anyString(), anyInt(), any(), any(), any()))
                 .thenReturn(rankResult("安徽", "物理类"));

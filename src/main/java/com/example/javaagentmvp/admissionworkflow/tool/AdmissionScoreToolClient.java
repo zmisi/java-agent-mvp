@@ -2,6 +2,7 @@ package com.example.javaagentmvp.admissionworkflow.tool;
 
 import com.example.javaagentmvp.observability.AgentMetrics;
 import com.example.javaagentmvp.observability.TraceResponseFilter;
+import com.example.javaagentmvp.admissionworkflow.DefaultAdmissionYear;
 import com.example.javaagentmvp.admissionworkflow.format.RankSubjectGroupResolver;
 import com.example.javaagentmvp.admissionworkflow.format.ScoreToRankResolver;
 import com.example.javaagentmvp.chat.ui.McpTableExtractor;
@@ -64,9 +65,7 @@ public class AdmissionScoreToolClient {
         if (rankSubjectGroup != null) {
             args.put("subject_group", rankSubjectGroup);
         }
-        if (year != null) {
-            args.put("year", year);
-        }
+        args.put("year", DefaultAdmissionYear.resolve(year));
 
         String argsJson;
         try {
@@ -121,12 +120,13 @@ public class AdmissionScoreToolClient {
             String subjectGroup,
             Integer year,
             String admissionType) {
-        JsonNode rankResult = getRankByScore(runId, userScore, province, subjectGroup, year);
-        int userRank = ScoreToRankResolver.resolveRank(rankResult, year, subjectGroup)
+        int effectiveYear = DefaultAdmissionYear.resolve(year);
+        JsonNode rankResult = getRankByScore(runId, userScore, province, subjectGroup, effectiveYear);
+        int userRank = ScoreToRankResolver.resolveRank(rankResult, effectiveYear, subjectGroup)
                 .orElseThrow(() -> new IllegalStateException(
                         "无法将 " + userScore + " 分转换为位次，请补充省份、科类或年份"));
         JsonNode majorResult = getMajorByRank(
-                runId, userRank, province, subjectGroup, year, admissionType);
+                runId, userRank, province, subjectGroup, effectiveYear, admissionType);
         if (majorResult instanceof ObjectNode objectNode) {
             objectNode.put("user_score", userScore);
             objectNode.put("resolved_rank", userRank);
@@ -156,9 +156,7 @@ public class AdmissionScoreToolClient {
         if (subjectGroup != null && !subjectGroup.isBlank()) {
             args.put("subject_group", subjectGroup);
         }
-        if (year != null) {
-            args.put("year", year);
-        }
+        args.put("year", DefaultAdmissionYear.resolve(year));
         if (admissionType != null && !admissionType.isBlank()) {
             args.put("admission_type", admissionType);
         }
@@ -226,9 +224,7 @@ public class AdmissionScoreToolClient {
         if (subjectGroup != null && !subjectGroup.isBlank()) {
             args.put("subject_group", subjectGroup);
         }
-        if (year != null) {
-            args.put("year", year);
-        }
+        args.put("year", DefaultAdmissionYear.resolve(year));
         if (admissionType != null && !admissionType.isBlank()) {
             args.put("admission_type", admissionType);
         }

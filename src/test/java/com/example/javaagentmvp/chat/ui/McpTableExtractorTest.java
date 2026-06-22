@@ -39,6 +39,7 @@ class McpTableExtractorTest {
                     {
                       "university_name": "合肥工业大学",
                       "major_name": "能源与动力工程",
+                      "plan_count": 12,
                       "campus": "合肥校区",
                       "min_score": "630.00",
                       "min_rank": 10491,
@@ -67,6 +68,7 @@ class McpTableExtractorTest {
         assertEquals("可报专业（630分 · 安徽 · 2025 · 物理类 · 普通批）", table.title());
         assertEquals(2, table.rows().size());
         assertEquals("能源与动力工程", table.rows().get(0).get("major_name"));
+        assertEquals("12", table.rows().get(0).get("plan_count"));
         assertEquals("630", table.rows().get(0).get("min_score"));
         assertEquals("10491", table.rows().get(0).get("min_rank"));
         assertEquals("-", table.rows().get(1).get("min_rank"));
@@ -74,6 +76,37 @@ class McpTableExtractorTest {
         assertEquals("合肥工业大学", table.groups().get(0).universityName());
         assertEquals(2, table.groups().get(0).majorCount());
         assertEquals("628", table.groups().get(0).minScore());
+        assertEquals("12", table.groups().get(0).majors().get(0).get("plan_count"));
+        assertEquals("-", table.groups().get(0).majors().get(1).get("plan_count"));
+    }
+
+    @Test
+    void extractMajorByScoreShowsDashWhenPlanCountMissing() {
+        String responseData = """
+                {
+                  "count": 1,
+                  "majors": [
+                    {
+                      "university_name": "合肥工业大学",
+                      "major_name": "软件工程",
+                      "campus": "合肥校区",
+                      "min_score": "630",
+                      "min_rank": 10000,
+                      "max_score": null,
+                      "year": 2025,
+                      "subject_group": "物理类",
+                      "admission_type": "普通批"
+                    }
+                  ]
+                }
+                """;
+        ChatTable table = extractor.extract(
+                "getMajorByRank",
+                "{\"rank\":10000,\"province\":\"安徽\",\"year\":2025}",
+                responseData,
+                "稳").orElseThrow();
+        assertEquals("-", table.rows().get(0).get("plan_count"));
+        assertEquals("-", table.groups().get(0).majors().get(0).get("plan_count"));
     }
 
     @Test

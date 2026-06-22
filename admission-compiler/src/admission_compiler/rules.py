@@ -29,10 +29,12 @@ MAJOR_SEARCH_HINT = re.compile(
     r"专业|报什么|什么专业|哪些专业|可报|能上什么|报考|报志愿|志愿|什么学校|哪些学校|院校"
 )
 UNIVERSITY_HINT = re.compile(r"大学")
-RANK_WITH_MING = re.compile(r"排名\s*(\d+)\s*名")
-RANK_DEDI = re.compile(r"第\s*(\d+)\s*名")
-RANK_WEICI = re.compile(r"位次\s*(\d+)")
-RANK_WEI = re.compile(r"(\d+)\s*位(?!次)")
+RANK_NUMBER = r"(\d+(?:,\d+)*\s*万|\d+(?:,\d+)*)"
+RANK_WITH_MING = re.compile(rf"排名\s*{RANK_NUMBER}\s*名")
+RANK_DEDI = re.compile(rf"第\s*{RANK_NUMBER}\s*名")
+RANK_WEICI = re.compile(rf"位次\s*{RANK_NUMBER}")
+RANK_WEI = re.compile(rf"{RANK_NUMBER}\s*位(?!次)")
+RANK_MING = re.compile(rf"{RANK_NUMBER}\s*名")
 RANK_HINT = re.compile(r"排名|位次|名次|排多少|多少位|多少名|排第几")
 
 MAJOR_KEYWORDS = (
@@ -170,17 +172,21 @@ def parse_include_major_keywords(message: str) -> list[str]:
     return _parse_major_keywords((message or "").strip())
 
 
+def _parse_rank_number(text: str) -> int:
+    normalized = text.strip().replace(" ", "")
+    if normalized.endswith("万"):
+        num_part = normalized[:-1].replace(",", "")
+        return int(round(float(num_part) * 10_000))
+    return int(normalized.replace(",", ""))
+
+
 def _parse_rank(message: str) -> int | None:
-    for pattern in (RANK_WITH_MING, RANK_DEDI, RANK_WEICI, RANK_WEI):
+    for pattern in (RANK_WITH_MING, RANK_DEDI, RANK_WEICI, RANK_WEI, RANK_MING):
         match = pattern.search(message)
         if match:
-            return int(match.group(1))
+            return _parse_rank_number(match.group(1))
 
     has_rank_hint = bool(RANK_HINT.search(message))
-    match = RANK_MING.search(message)
-    if match and has_rank_hint:
-        return int(match.group(1))
-
     years = {int(m.group(1)) for m in YEAR_PATTERN.finditer(message)}
     last: int | None = None
     for match in BARE_NUMBER.finditer(message):

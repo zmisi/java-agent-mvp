@@ -1,5 +1,6 @@
 package com.example.javaagentmvp.admissionworkflow.nodes;
 
+import com.example.javaagentmvp.admissionworkflow.DefaultAdmissionYear;
 import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionQueryIr;
 import com.example.javaagentmvp.admissionworkflow.compiler.AdmissionSlotsIr;
 import com.example.javaagentmvp.admissionworkflow.engine.WorkflowContext;
@@ -65,6 +66,7 @@ public class ScoreToolNode implements WorkflowNode {
 
         try {
             List<String> provinces = provincesForQuery(slots);
+            int year = DefaultAdmissionYear.resolve(slots.year());
             List<JsonNode> provinceResults = new ArrayList<>();
             for (String province : provinces) {
                 JsonNode result = slots.rank() != null
@@ -73,14 +75,14 @@ public class ScoreToolNode implements WorkflowNode {
                                 slots.rank(),
                                 province,
                                 slots.subjectGroup(),
-                                slots.year(),
+                                year,
                                 slots.admissionType())
                         : admissionScoreToolClient.getMajorsForScore(
                                 context.runId(),
                                 slots.score(),
                                 province,
                                 slots.subjectGroup(),
-                                slots.year(),
+                                year,
                                 slots.admissionType());
                 provinceResults.add(tagProvince(result, province));
             }
@@ -97,7 +99,7 @@ public class ScoreToolNode implements WorkflowNode {
                     "mcpQueryScore", "",
                     "provinces", provinces,
                     "subjectGroup", slots.subjectGroup() == null ? "" : slots.subjectGroup(),
-                    "year", slots.year() == null ? "" : slots.year(),
+                    "year", year,
                     "admissionType", slots.admissionType() == null ? "" : slots.admissionType()));
         }
         catch (RuntimeException ex) {
@@ -113,6 +115,7 @@ public class ScoreToolNode implements WorkflowNode {
 
         try {
             List<String> provinces = provincesForQuery(slots);
+            int year = DefaultAdmissionYear.resolve(slots.year());
             JsonNode result;
             if (provinces.isEmpty()) {
                 result = admissionScoreToolClient.getRankByScore(
@@ -120,7 +123,7 @@ public class ScoreToolNode implements WorkflowNode {
                         slots.score(),
                         null,
                         slots.subjectGroup(),
-                        slots.year());
+                        year);
             }
             else {
                 List<JsonNode> provinceResults = new ArrayList<>();
@@ -130,7 +133,7 @@ public class ScoreToolNode implements WorkflowNode {
                             slots.score(),
                             province,
                             slots.subjectGroup(),
-                            slots.year()));
+                            year));
                 }
                 result = mergeRankResults(provinceResults);
             }
@@ -141,7 +144,7 @@ public class ScoreToolNode implements WorkflowNode {
                     "score", slots.score(),
                     "provinces", provinces,
                     "subjectGroup", slots.subjectGroup() == null ? "" : slots.subjectGroup(),
-                    "year", slots.year() == null ? "" : slots.year()));
+                    "year", year));
         }
         catch (RuntimeException ex) {
             return WorkflowNodeResult.failed(ex.getMessage());
