@@ -19,6 +19,12 @@ public final class ChatTableGrouper {
             "subject_group",
             "admission_type");
 
+    private static final List<String> META_FIELD_KEYS = List.of(
+            MajorHistoryTableExpander.ROW_KIND,
+            "row_kind",
+            MajorHistoryTableExpander.PLAN_DELTA,
+            MajorHistoryTableExpander.CAMPUS_CHANGE);
+
     private ChatTableGrouper() {
     }
 
@@ -72,17 +78,19 @@ public final class ChatTableGrouper {
     }
 
     private static ChatTableGroup toGroup(SchoolBucket bucket) {
-        List<Map<String, String>> majors = bucket.majors().stream()
+        List<Map<String, String>> majors = bucket.majors();
+        List<Map<String, String>> currentMajors = majors.stream()
+                .filter(row -> !MajorHistoryTableExpander.isHistoryRow(row))
                 .sorted(Comparator.<Map<String, String>>comparingDouble(row -> parseScore(row.get("min_score"))).reversed())
                 .toList();
-        String minScore = majors.stream()
+        String minScore = currentMajors.stream()
                 .map(row -> row.get("min_score"))
                 .min(Comparator.comparingDouble(ChatTableGrouper::parseScore))
                 .orElse("-");
         return new ChatTableGroup(
                 bucket.universityCode(),
                 bucket.universityName(),
-                majors.size(),
+                currentMajors.isEmpty() ? majors.size() : currentMajors.size(),
                 minScore,
                 majors);
     }
@@ -91,6 +99,12 @@ public final class ChatTableGrouper {
         Map<String, String> major = new LinkedHashMap<>();
         for (String key : MAJOR_FIELD_KEYS) {
             major.put(key, valueOrDash(row.get(key)));
+        }
+        for (String key : META_FIELD_KEYS) {
+            String value = row.get(key);
+            if (value != null && !value.isBlank()) {
+                major.put(key, value);
+            }
         }
         return major;
     }

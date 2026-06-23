@@ -2,6 +2,7 @@ package com.example.javaagentmvp.admissionworkflow.service;
 
 import com.example.javaagentmvp.admissionworkflow.ui.WorkflowReportTableBuilder;
 import com.example.javaagentmvp.chat.ui.ChatTable;
+import com.example.javaagentmvp.chat.ui.ChatTableEnrichmentService;
 import com.example.javaagentmvp.rag.RagSource;
 import org.springframework.stereotype.Component;
 
@@ -13,9 +14,13 @@ import java.util.Map;
 public class WorkflowReportPresenter {
 
     private final WorkflowReportTableBuilder workflowReportTableBuilder;
+    private final ChatTableEnrichmentService tableEnrichmentService;
 
-    public WorkflowReportPresenter(WorkflowReportTableBuilder workflowReportTableBuilder) {
+    public WorkflowReportPresenter(
+            WorkflowReportTableBuilder workflowReportTableBuilder,
+            ChatTableEnrichmentService tableEnrichmentService) {
         this.workflowReportTableBuilder = workflowReportTableBuilder;
+        this.tableEnrichmentService = tableEnrichmentService;
     }
 
     public PresentedWorkflowReport present(String inputMessage, Map<String, Object> result) {
@@ -23,7 +28,8 @@ public class WorkflowReportPresenter {
             result = Map.of();
         }
         String assistant = resolveAssistant(result);
-        List<ChatTable> tables = workflowReportTableBuilder.buildTables(inputMessage, result);
+        List<ChatTable> tables = tableEnrichmentService.enrichTables(
+                workflowReportTableBuilder.buildTables(inputMessage, result));
         List<RagSource> sources = extractPolicySources(result.get("policySources"));
         return new PresentedWorkflowReport(assistant, tables, sources);
     }

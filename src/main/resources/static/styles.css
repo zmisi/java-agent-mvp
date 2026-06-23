@@ -1927,6 +1927,45 @@ body {
   word-break: break-all;
 }
 
+.chat-table-history-row td {
+  color: var(--text-secondary, #64748b);
+}
+
+.chat-table-history-row td:first-child + td {
+  padding-left: 0;
+}
+
+.plan-delta {
+  display: inline-block;
+  margin-left: 0.35rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 0.25rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.2;
+  vertical-align: middle;
+}
+
+.plan-delta-up {
+  color: #047857;
+  background: #ecfdf5;
+}
+
+.plan-delta-down {
+  color: #b45309;
+  background: #fffbeb;
+}
+
+.plan-delta-flat {
+  color: #64748b;
+  background: #f1f5f9;
+}
+
+.campus-change {
+  color: #1d4ed8;
+  background: #eff6ff;
+}
+
 /* Guide reference pages */
 .guide-page-body {
   margin: 0;

@@ -1033,7 +1033,27 @@ function buildDisplayColumns(columns) {
 }
 
 function majorColumnsFromTable(columns) {
-  return buildDisplayColumns((columns || []).filter((col) => col.key !== "university_name"));
+  const filtered = (columns || []).filter((col) => col.key !== "university_name");
+  return buildDisplayColumns(orderMajorColumns(filtered));
+}
+
+function orderMajorColumns(columns) {
+  const preferred = ["major_name", "year", "plan_count", "campus", "min_score", "min_rank", "max_score", "subject_group", "admission_type"];
+  const byKey = new Map(columns.map((col) => [col.key, col]));
+  const ordered = [];
+  for (const key of preferred) {
+    const col = byKey.get(key);
+    if (col) {
+      ordered.push(col);
+      byKey.delete(key);
+    }
+  }
+  for (const col of columns) {
+    if (byKey.has(col.key)) {
+      ordered.push(col);
+    }
+  }
+  return ordered;
 }
 
 function tableBodyScrollHeightPx(rowCount) {
@@ -1045,6 +1065,145 @@ function renderTableCell(col, value) {
   return `<td style="min-width:${col.minWidthPx}px" class="align-${col.align}${wrapCls}">${value}</td>`;
 }
 
+function parsePlanCount(value) {
+  const text = String(value ?? "").trim();
+  if (!text || text === "-") {
+    return null;
+  }
+  const parsed = Number.parseInt(text, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function planDeltaBadge(delta) {
+  if (delta == null || delta === "") {
+    return "";
+  }
+  const parsed = typeof delta === "number" ? delta : Number.parseInt(String(delta), 10);
+  if (!Number.isFinite(parsed)) {
+    return "";
+  }
+  if (parsed === 0) {
+    return '<span class="plan-delta plan-delta-flat">0</span>';
+  }
+  const cls = parsed > 0 ? "plan-delta-up" : "plan-delta-down";
+  const label = parsed > 0 ? `+${parsed}` : String(parsed);
+  return `<span class="plan-delta ${cls}">${escapeHtml(label)}</span>`;
+}
+
+function normalizeCampusLabel(value) {
+  const text = String(value ?? "").trim();
+  if (!text || text === "-" || text === "不分校区") {
+    return "校本部";
+  }
+  return text;
+}
+
+function formatCampusChangeLabel(baselineCampus, futureCampus) {
+  const base = normalizeCampusLabel(baselineCampus);
+  const future = normalizeCampusLabel(futureCampus);
+  if (!base || !future || base === future) {
+    return "";
+  }
+  return `${base}→${future}`;
+}
+
+function campusChangeBadge(label) {
+  if (!label) {
+    return "";
+  }
+  return `<span class="plan-delta campus-change">${escapeHtml(label)}</span>`;
+}
+
+function formatCampusCell(row, baselineCampus, baselineYear) {
+  const baseText = formatTableCell(row.campus);
+  if (isHistoryMajorRow(row)) {
+    return baseText;
+  }
+  const rowYear = Number.parseInt(String(row.year || "").trim(), 10);
+  const base = Number.isFinite(baselineYear) ? baselineYear : 2025;
+  if (!Number.isFinite(rowYear) || rowYear !== base + 1) {
+    return baseText;
+  }
+  let change = row.campus_change;
+  if (!change) {
+    change = formatCampusChangeLabel(baselineCampus, row.campus);
+  }
+  const badge = campusChangeBadge(change);
+  return badge ? `${baseText} ${badge}` : baseText;
+}
+
+function formatPlanCountCell(row, baselinePlanCount, baselineYear) {
+  const baseText = formatTableCell(row.plan_count);
+  if (isHistoryMajorRow(row)) {
+    return baseText;
+  }
+  const rowYear = Number.parseInt(String(row.year || "").trim(), 10);
+  const base = Number.isFinite(baselineYear) ? baselineYear : 2025;
+  if (!Number.isFinite(rowYear) || rowYear !== base + 1) {
+    return baseText;
+  }
+  let delta = row.plan_delta;
+  if (delta == null || delta === "") {
+    const current = parsePlanCount(row.plan_count);
+    if (current != null && baselinePlanCount != null) {
+      delta = String(current - baselinePlanCount);
+    }
+  }
+  const badge = planDeltaBadge(delta);
+  return badge ? `${baseText} ${badge}` : baseText;
+}
+
+function isAnchorMajorRow(row) {
+  return row && (row._row_kind === "current" || row.row_kind === "current");
+}
+
+function groupMajorYearRows(rows) {
+  const groups = [];
+  let group = [];
+  for (const row of rows || []) {
+    if (isAnchorMajorRow(row) && group.length > 0) {
+      groups.push(group);
+      group = [];
+    }
+    group.push(row);
+  }
+  if (group.length > 0) {
+    groups.push(group);
+  }
+  return groups;
+}
+
+function resolveMajorBaseline(group, defaultBaselineYear = 2025) {
+  const baselineRow = group.find((row) => {
+    const year = Number.parseInt(String(row.year || "").trim(), 10);
+    return Number.isFinite(year) && year === defaultBaselineYear;
+  });
+  if (!baselineRow) {
+    return { planCount: null, campus: null, year: defaultBaselineYear };
+  }
+  return {
+    planCount: parsePlanCount(baselineRow.plan_count),
+    campus: baselineRow.campus,
+    year: defaultBaselineYear,
+  };
+}
+
+function isHistoryMajorRow(row) {
+  if (!row) {
+    return false;
+  }
+  if (row._row_kind === "history" || row.row_kind === "history") {
+    return true;
+  }
+  const major = String(row.major_name || "").trim();
+  const year = String(row.year || "").trim();
+  if (!major || !year || major !== year) {
+    return false;
+  }
+  const yearNum = Number.parseInt(major, 10);
+  return Number.isInteger(yearNum) && yearNum >= 2000 && yearNum <= 2099;
+}
+
 function renderTableGrid(displayColumns, rows) {
   const tableMinWidth = displayColumns.reduce((sum, col) => sum + col.minWidthPx, 0);
   const bodyHeight = tableBodyScrollHeightPx(rows.length);
@@ -1052,15 +1211,34 @@ function renderTableGrid(displayColumns, rows) {
   const head = displayColumns
     .map((col) => `<th style="min-width:${col.minWidthPx}px" class="align-${col.align}">${escapeHtml(col.label)}</th>`)
     .join("");
-  const body = rows
-    .map((row, rowIndex) => {
-      const cells = displayColumns.map((col) => {
-        const value = col.key === INDEX_COLUMN_KEY
-          ? String(rowIndex + 1)
-          : formatTableCell(row[col.key]);
-        return renderTableCell(col, value);
-      }).join("");
-      return `<tr>${cells}</tr>`;
+  let majorIndex = 0;
+  const body = groupMajorYearRows(rows)
+    .flatMap((group) => {
+      const baseline = resolveMajorBaseline(group);
+      return group.map((row) => {
+        const cells = displayColumns.map((col) => {
+          let value;
+          if (col.key === INDEX_COLUMN_KEY) {
+            if (isAnchorMajorRow(row)) {
+              majorIndex += 1;
+              value = String(majorIndex);
+            } else {
+              value = "";
+            }
+          } else if (col.key === "major_name" && isHistoryMajorRow(row)) {
+            value = "";
+          } else if (col.key === "plan_count") {
+            value = formatPlanCountCell(row, baseline.planCount, baseline.year);
+          } else if (col.key === "campus") {
+            value = formatCampusCell(row, baseline.campus, baseline.year);
+          } else {
+            value = formatTableCell(row[col.key]);
+          }
+          return renderTableCell(col, value);
+        }).join("");
+        const rowClass = isHistoryMajorRow(row) ? ' class="chat-table-history-row"' : "";
+        return `<tr${rowClass}>${cells}</tr>`;
+      });
     })
     .join("");
   return `<div class="chat-table-scroll" style="max-height:${scrollMaxHeight}px">

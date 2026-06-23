@@ -19,12 +19,12 @@ public class McpTableExtractor {
     private static final List<ChatTableColumn> MAJOR_BY_SCORE_COLUMNS = List.of(
             new ChatTableColumn("university_name", "院校"),
             new ChatTableColumn("major_name", "专业"),
+            new ChatTableColumn("year", "年份"),
             new ChatTableColumn("plan_count", "计划数"),
             new ChatTableColumn("campus", "校区"),
             new ChatTableColumn("min_score", "最低分"),
             new ChatTableColumn("min_rank", "最低位次"),
             new ChatTableColumn("max_score", "最高分"),
-            new ChatTableColumn("year", "年份"),
             new ChatTableColumn("subject_group", "科类"),
             new ChatTableColumn("admission_type", "批次"));
 
@@ -40,7 +40,7 @@ public class McpTableExtractor {
 
     /** Test/manual construction without Spring context. */
     public McpTableExtractor(ObjectMapper objectMapper) {
-        this(objectMapper, ChatTableEnrichmentService.noop());
+        this(objectMapper, ChatTableEnrichmentService.profilesOnly());
     }
 
     @Autowired
@@ -239,7 +239,12 @@ public class McpTableExtractor {
             }
             rows.add(row);
         }
-        ChatTable table = new ChatTable(buildMajorByScoreTitle(toolInput, tierLabel), MAJOR_BY_SCORE_COLUMNS, rows);
+        String province = parseToolInputProvince(toolInput);
+        ChatTable table = new ChatTable(
+                buildMajorByScoreTitle(toolInput, tierLabel),
+                MAJOR_BY_SCORE_COLUMNS,
+                rows,
+                province);
         return Optional.of(tableEnrichmentService.enrichTable(table));
     }
 
@@ -291,6 +296,24 @@ public class McpTableExtractor {
         }
         catch (Exception ex) {
             return objectMapper.createObjectNode();
+        }
+    }
+
+    private String parseToolInputProvince(String toolInput) {
+        if (toolInput == null || toolInput.isBlank()) {
+            return null;
+        }
+        try {
+            JsonNode args = objectMapper.readTree(toolInput);
+            JsonNode province = args.get("province");
+            if (province == null || province.isNull()) {
+                return null;
+            }
+            String text = province.asText("").strip();
+            return text.isEmpty() ? null : text;
+        }
+        catch (Exception ex) {
+            return null;
         }
     }
 

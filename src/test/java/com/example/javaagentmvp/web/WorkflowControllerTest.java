@@ -15,6 +15,7 @@ import com.example.javaagentmvp.admissionworkflow.service.WorkflowConversationPe
 import com.example.javaagentmvp.admissionworkflow.service.WorkflowReportPresenter;
 import com.example.javaagentmvp.admissionworkflow.ui.WorkflowReportTableBuilder;
 import com.example.javaagentmvp.chat.ConversationAccessService;
+import com.example.javaagentmvp.chat.ui.ChatTableEnrichmentService;
 import com.example.javaagentmvp.chat.ui.McpTableExtractor;
 import com.example.javaagentmvp.rag.RagSource;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -239,7 +240,8 @@ class WorkflowControllerTest {
     private static WorkflowReportPresenter presenter() {
         ObjectMapper objectMapper = new ObjectMapper();
         return new WorkflowReportPresenter(
-                new WorkflowReportTableBuilder(new McpTableExtractor(objectMapper), objectMapper));
+                new WorkflowReportTableBuilder(new McpTableExtractor(objectMapper), objectMapper),
+                ChatTableEnrichmentService.noop());
     }
 
     private static HttpServletRequest authedRequest(long userId) {

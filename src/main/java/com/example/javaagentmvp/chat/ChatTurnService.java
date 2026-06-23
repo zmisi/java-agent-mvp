@@ -11,6 +11,7 @@ import com.example.javaagentmvp.admissionworkflow.format.RankResponseFormatter;
 import com.example.javaagentmvp.chat.context.ChatContextUsageRegistry;
 import com.example.javaagentmvp.chat.context.ContextUsageResponse;
 import com.example.javaagentmvp.chat.ui.ChatTable;
+import com.example.javaagentmvp.chat.ui.ChatTableEnrichmentService;
 import com.example.javaagentmvp.chat.ui.McpRankContext;
 import com.example.javaagentmvp.chat.ui.McpTableContext;
 import com.example.javaagentmvp.rag.RagFlowContext;
@@ -37,6 +38,7 @@ public class ChatTurnService {
     private final ChatContextUsageRegistry chatContextUsageRegistry;
     private final PostgresChatMemory postgresChatMemory;
     private final UnsupportedConstraintRecorder unsupportedConstraintRecorder;
+    private final ChatTableEnrichmentService tableEnrichmentService;
 
     public ChatTurnService(
             ChatClient chatClient,
@@ -44,13 +46,15 @@ public class ChatTurnService {
             QwenApiLoggingAdvisor qwenApiLoggingAdvisor,
             ChatContextUsageRegistry chatContextUsageRegistry,
             PostgresChatMemory postgresChatMemory,
-            UnsupportedConstraintRecorder unsupportedConstraintRecorder) {
+            UnsupportedConstraintRecorder unsupportedConstraintRecorder,
+            ChatTableEnrichmentService tableEnrichmentService) {
         this.chatClient = chatClient;
         this.chatMemory = chatMemory;
         this.qwenApiLoggingAdvisor = qwenApiLoggingAdvisor;
         this.chatContextUsageRegistry = chatContextUsageRegistry;
         this.postgresChatMemory = postgresChatMemory;
         this.unsupportedConstraintRecorder = unsupportedConstraintRecorder;
+        this.tableEnrichmentService = tableEnrichmentService;
     }
 
     public ChatController.ChatReplyDto execute(String conversationId, String message) {
@@ -79,7 +83,7 @@ public class ChatTurnService {
             reply = applyUnsupportedConstraintAck(reply);
 
             ContextUsageResponse contextUsage = chatContextUsageRegistry.consume();
-            List<ChatTable> tables = withRankProvinces(McpTableContext.tables());
+            List<ChatTable> tables = tableEnrichmentService.enrichTables(withRankProvinces(McpTableContext.tables()));
             if (!tables.isEmpty()) {
                 postgresChatMemory.attachUiTablesToLatestAssistant(conversationId, tables);
             }

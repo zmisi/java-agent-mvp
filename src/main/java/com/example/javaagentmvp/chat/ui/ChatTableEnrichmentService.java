@@ -1,5 +1,6 @@
 package com.example.javaagentmvp.chat.ui;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 
 import java.nio.file.Path;
@@ -15,24 +16,40 @@ public class ChatTableEnrichmentService {
     private final UniversityProfileRepository universityProfileRepository;
     private final UniversityProfileProperties properties;
     private final Path logoDir;
+    private final MajorHistoryEnrichmentService majorHistoryEnrichmentService;
 
     public ChatTableEnrichmentService(
             UniversityProfileRepository universityProfileRepository,
-            UniversityProfileProperties properties) {
+            UniversityProfileProperties properties,
+            MajorHistoryEnrichmentService majorHistoryEnrichmentService) {
         this.universityProfileRepository = universityProfileRepository;
         this.properties = properties == null ? UniversityProfileProperties.defaults() : properties;
         this.logoDir = Path.of(this.properties.logoDir()).toAbsolutePath().normalize();
+        this.majorHistoryEnrichmentService = majorHistoryEnrichmentService;
+    }
+
+    /** Grouping/logo enrichment only — avoids history MCP and circular noop wiring in tests. */
+    public static ChatTableEnrichmentService profilesOnly() {
+        return new ChatTableEnrichmentService(null, new UniversityProfileProperties(false, "."), null);
     }
 
     public static ChatTableEnrichmentService noop() {
-        return new ChatTableEnrichmentService(null, new UniversityProfileProperties(false, "."));
+        ObjectMapper objectMapper = new ObjectMapper();
+        return new ChatTableEnrichmentService(
+                null,
+                new UniversityProfileProperties(false, "."),
+                new MajorHistoryEnrichmentService(MajorHistoryMcpClient.noop(objectMapper)));
     }
 
     public List<ChatTable> enrichTables(List<ChatTable> tables) {
         if (tables == null || tables.isEmpty()) {
             return List.of();
         }
-        return tables.stream().map(this::enrichTable).toList();
+        List<ChatTable> enriched = tables.stream().map(this::enrichTable).toList();
+        if (majorHistoryEnrichmentService == null) {
+            return enriched;
+        }
+        return majorHistoryEnrichmentService.enrichWithHistory(enriched);
     }
 
     public ChatTable enrichTable(ChatTable table) {
