@@ -94,6 +94,8 @@
   --font-size-sm: calc(var(--font-size-base) - 1px);
   --font-size-xs: calc(var(--font-size-base) - 2px);
   --sidebar-width: 260px;
+  --sidebar-width-min: 200px;
+  --sidebar-width-max: 480px;
   --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 12px;
@@ -116,7 +118,7 @@ body {
 
 .app {
   display: grid;
-  grid-template-columns: var(--sidebar-width) 1fr;
+  grid-template-columns: var(--sidebar-width) 5px 1fr;
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
@@ -126,10 +128,58 @@ body {
   min-height: 0;
 }
 
+.sidebar-resizer {
+  position: relative;
+  width: 5px;
+  margin: 0 -2px;
+  z-index: 4;
+  touch-action: none;
+  outline: none;
+}
+
+.sidebar-resizer::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  width: 13px;
+  cursor: col-resize;
+}
+
+.sidebar-resizer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 1px;
+  background: var(--border);
+  transition: background 0.12s ease, width 0.12s ease, left 0.12s ease;
+  pointer-events: none;
+}
+
+.sidebar-resizer:hover::after,
+.sidebar-resizer:focus-visible::after,
+body.sidebar-resizing .sidebar-resizer::after {
+  left: 1px;
+  width: 3px;
+  background: color-mix(in oklab, var(--accent) 70%, var(--border));
+}
+
+body.sidebar-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
+body.sidebar-resizing * {
+  cursor: col-resize !important;
+}
+
 /* Sidebar */
 .sidebar {
   background: var(--sidebar);
-  border-right: 1px solid var(--border);
+  border-right: none;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -806,6 +856,10 @@ body {
   margin-left: auto;
   margin-right: auto;
   flex-shrink: 0;
+}
+
+.msg.assistant:has(.chat-tables) {
+  max-width: min(960px, calc(100vw - var(--sidebar-width) - 40px));
 }
 
 .msg.user {
@@ -1874,10 +1928,11 @@ body {
 }
 
 .chat-table-grid {
-  width: max-content;
+  width: 100%;
   min-width: 100%;
   border-collapse: collapse;
   font-size: var(--font-size-sm);
+  table-layout: auto;
 }
 
 .chat-table-grid thead {
@@ -2075,6 +2130,18 @@ body {
 }
 
 @media (max-width: 640px) {
+  .app {
+    grid-template-columns: var(--sidebar-width) 1fr;
+  }
+
+  .sidebar-resizer {
+    display: none;
+  }
+
+  .sidebar {
+    border-right: 1px solid var(--border);
+  }
+
   .guide-page {
     padding: 20px 14px 48px;
   }

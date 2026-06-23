@@ -8,6 +8,9 @@ const SETTINGS_KEY = "db-agent-ui-settings";
 const CONTEXT_USAGE_CACHE_KEY = "db-agent-context-usage-cache";
 const AUTH_TOKEN_KEY = "db-agent-auth-token";
 const SIDEBAR_RECENT_LIMIT = 6;
+const SIDEBAR_WIDTH_DEFAULT = 260;
+const SIDEBAR_WIDTH_MIN = 200;
+const SIDEBAR_WIDTH_MAX = 480;
 
 const state = {
   activeId: null,
@@ -79,6 +82,109 @@ function loadSettings() {
 
 function saveSettings(settings) {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+}
+
+function sidebarWidthMax() {
+  return Math.min(SIDEBAR_WIDTH_MAX, Math.floor(window.innerWidth * 0.42));
+}
+
+function clampSidebarWidth(width) {
+  const max = sidebarWidthMax();
+  return Math.max(SIDEBAR_WIDTH_MIN, Math.min(max, Math.round(width)));
+}
+
+function applySidebarWidth(width) {
+  const clamped = clampSidebarWidth(width);
+  document.documentElement.style.setProperty("--sidebar-width", `${clamped}px`);
+  const resizer = $("sidebarResizer");
+  if (resizer) {
+    resizer.setAttribute("aria-valuenow", String(clamped));
+    resizer.setAttribute("aria-valuemin", String(SIDEBAR_WIDTH_MIN));
+    resizer.setAttribute("aria-valuemax", String(sidebarWidthMax()));
+  }
+  return clamped;
+}
+
+function initSidebarResizer() {
+  const resizer = $("sidebarResizer");
+  if (!resizer) {
+    return;
+  }
+
+  const settings = loadSettings();
+  applySidebarWidth(Number.isFinite(settings.sidebarWidth) ? settings.sidebarWidth : SIDEBAR_WIDTH_DEFAULT);
+
+  let dragging = false;
+  let startX = 0;
+  let startWidth = SIDEBAR_WIDTH_DEFAULT;
+
+  const finishDrag = () => {
+    if (!dragging) {
+      return;
+    }
+    dragging = false;
+    document.body.classList.remove("sidebar-resizing");
+    const width = applySidebarWidth(
+      parseInt(getComputedStyle(document.documentElement).getPropertyValue("--sidebar-width"), 10)
+        || SIDEBAR_WIDTH_DEFAULT,
+    );
+    saveSettings({ ...loadSettings(), sidebarWidth: width });
+  };
+
+  resizer.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) {
+      return;
+    }
+    dragging = true;
+    startX = event.clientX;
+    startWidth = parseInt(getComputedStyle(document.documentElement).getPropertyValue("--sidebar-width"), 10)
+      || SIDEBAR_WIDTH_DEFAULT;
+    resizer.setPointerCapture(event.pointerId);
+    document.body.classList.add("sidebar-resizing");
+    event.preventDefault();
+  });
+
+  resizer.addEventListener("pointermove", (event) => {
+    if (!dragging) {
+      return;
+    }
+    applySidebarWidth(startWidth + (event.clientX - startX));
+  });
+
+  resizer.addEventListener("pointerup", finishDrag);
+  resizer.addEventListener("pointercancel", finishDrag);
+
+  resizer.addEventListener("dblclick", () => {
+    const width = applySidebarWidth(SIDEBAR_WIDTH_DEFAULT);
+    saveSettings({ ...loadSettings(), sidebarWidth: width });
+  });
+
+  resizer.addEventListener("keydown", (event) => {
+    const current = parseInt(getComputedStyle(document.documentElement).getPropertyValue("--sidebar-width"), 10)
+      || SIDEBAR_WIDTH_DEFAULT;
+    const step = event.shiftKey ? 24 : 8;
+    let next = current;
+    if (event.key === "ArrowLeft") {
+      next = current - step;
+    } else if (event.key === "ArrowRight") {
+      next = current + step;
+    } else if (event.key === "Home") {
+      next = SIDEBAR_WIDTH_MIN;
+    } else if (event.key === "End") {
+      next = sidebarWidthMax();
+    } else {
+      return;
+    }
+    event.preventDefault();
+    const width = applySidebarWidth(next);
+    saveSettings({ ...loadSettings(), sidebarWidth: width });
+  });
+
+  window.addEventListener("resize", () => {
+    const current = parseInt(getComputedStyle(document.documentElement).getPropertyValue("--sidebar-width"), 10)
+      || SIDEBAR_WIDTH_DEFAULT;
+    applySidebarWidth(current);
+  });
 }
 
 function applySettings(settings) {
@@ -993,16 +1099,16 @@ const INDEX_COLUMN_KEY = "_index";
 const MAX_TABLE_BODY_HEIGHT_PX = 280;
 
 const COLUMN_LAYOUT = {
-  [INDEX_COLUMN_KEY]: { minWidthPx: 36, align: "center", wrap: false },
+  [INDEX_COLUMN_KEY]: { minWidthPx: 38, align: "center", wrap: false },
   university_name: { minWidthPx: 84, align: "left", wrap: false },
-  major_name: { minWidthPx: 120, align: "left", wrap: true },
-  plan_count: { minWidthPx: 48, align: "left", wrap: false },
-  campus: { minWidthPx: 64, align: "left", wrap: false },
-  min_score: { minWidthPx: 48, align: "left", wrap: false },
-  min_rank: { minWidthPx: 56, align: "left", wrap: false },
-  max_score: { minWidthPx: 48, align: "left", wrap: false },
-  year: { minWidthPx: 40, align: "left", wrap: false },
-  subject_group: { minWidthPx: 48, align: "left", wrap: false },
+  major_name: { minWidthPx: 124, align: "left", wrap: true },
+  year: { minWidthPx: 42, align: "left", wrap: false },
+  plan_count: { minWidthPx: 64, align: "left", wrap: false },
+  campus: { minWidthPx: 80, align: "left", wrap: false },
+  min_score: { minWidthPx: 50, align: "left", wrap: false },
+  min_rank: { minWidthPx: 62, align: "left", wrap: false },
+  max_score: { minWidthPx: 50, align: "left", wrap: false },
+  subject_group: { minWidthPx: 50, align: "left", wrap: false },
   year_label: { minWidthPx: 88, align: "left", wrap: false },
   rank_range: { minWidthPx: 80, align: "left", wrap: false },
   segment_count: { minWidthPx: 72, align: "left", wrap: false },
@@ -1842,6 +1948,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   }
 
   wire();
+  initSidebarResizer();
   clearContextUsage();
   setComposerState(false);
   autoResizeInput();

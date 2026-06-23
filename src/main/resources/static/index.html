@@ -10,10 +10,11 @@
         var s = JSON.parse(localStorage.getItem("db-agent-ui-settings") || "{}");
         document.documentElement.dataset.theme = s.theme || "system";
         if (s.fontSize) document.documentElement.style.setProperty("--font-size-base", s.fontSize + "px");
+        if (s.sidebarWidth) document.documentElement.style.setProperty("--sidebar-width", s.sidebarWidth + "px");
       } catch (e) { /* ignore */ }
     })();
   </script>
-  <link rel="stylesheet" href="/styles.css?v=20260621-4"/>
+  <link rel="stylesheet" href="/styles.css?v=20260622-2"/>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
@@ -58,6 +59,18 @@
       </button>
     </div>
   </aside>
+
+  <div
+    id="sidebarResizer"
+    class="sidebar-resizer"
+    role="separator"
+    aria-orientation="vertical"
+    aria-label="调整侧栏宽度"
+    aria-valuemin="200"
+    aria-valuemax="480"
+    aria-valuenow="260"
+    tabindex="0"
+  ></div>
 
   <div class="workspace-root">
     <main id="chatView" class="workspace workspace-chat" aria-label="Chat">
